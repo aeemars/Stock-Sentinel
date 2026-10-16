@@ -131,3 +131,11 @@ def get_db_connection():
 def put_db_connection(conn):
     if _pool is not None and conn is not None:
         _pool.putconn(conn)
+
+def get_db():
+    """FastAPI dependency yielding a pooled DB connection."""
+    conn = get_db_connection()
+    try:
+        yield conn
+    finally:
+        put_db_connection(conn)

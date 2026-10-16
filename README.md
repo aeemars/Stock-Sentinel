@@ -11,10 +11,10 @@ AI-powered stock monitoring dashboard. Track portfolios, get sentiment analysis 
 
 ## Tech Stack
 
-- **Backend:** Python, Flask, PostgreSQL
-- **Data & AI:** yfinance, Prophet, VADER Sentiment, Pandas
+- **Backend:** Python, FastAPI, Uvicorn, PostgreSQL
+- **Data & AI:** yfinance, Prophet, VADER Sentiment, Pandas, HTTPX
 - **Frontend:** HTML/Jinja2, Tailwind CSS, Material Symbols
-- **Auth & Ops:** Flask-Login, bcrypt, APScheduler
+- **Auth & Ops:** ItsDangerous (Signed Session Cookies), bcrypt, APScheduler
 
 ## Quick Start
 
@@ -35,7 +35,8 @@ cp .env.example .env
 # Set NEON_DATABASE_URL, SECRET_KEY, and optionally NEYNAR_API_KEY
 
 # 4. Run
-python app.py
+uvicorn main:app --reload --port 5000
+# or python main.py
 ```
 
 Open `http://localhost:5000/register` to create an account.
@@ -53,11 +54,17 @@ See [roma/ROMA.md](roma/ROMA.md) for details.
 ## Project Structure
 
 ```
-app.py              Flask routes + auth
-db.py               PostgreSQL schema + connection pool
+main.py             FastAPI application & ASGI lifespan
+app/
+  config.py         Pydantic BaseSettings configuration
+  dependencies.py   Auth & CSRF dependencies
+  session.py        Signed session cookie middleware & flash messaging
+  templates_config.py Jinja2Templates configuration & Flask-compatible globals
+  routers/          Modular route handlers (auth, dashboard, portfolios, holdings, alerts, analytics, api)
+db.py               PostgreSQL schema + connection pool + get_db dependency
 scheduler.py        APScheduler cron job
 roma/
-  agents.py         PriceAgent, SentimentAgent, ForecastAgent, SynthesizerAgent
+  agents.py         PriceAgent, SentimentAgent (HTTPX), ForecastAgent, SynthesizerAgent
   workflow.py       Orchestrates the agent pipeline
 templates/          Jinja2 pages (dashboard, portfolio, alerts, analytics, etc.)
 static/             Favicon and assets

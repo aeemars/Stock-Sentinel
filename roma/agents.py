@@ -1,7 +1,7 @@
 import datetime
 import yfinance as yf
 import pandas as pd
-import requests
+import httpx
 import os
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
@@ -39,9 +39,10 @@ class SentimentAgent:
                 "accept": "application/json",
                 "api_key": api_key
             }
-            response = requests.get(url, params=params, headers=headers, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(url, params=params, headers=headers)
+                response.raise_for_status()
+                data = response.json()
             
             texts = [cast.get('text', '') for cast in data.get('result', {}).get('casts', [])]
         except Exception as e:
