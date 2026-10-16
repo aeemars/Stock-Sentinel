@@ -65,6 +65,9 @@ def init_db(database_url: str):
                     portfolio_id INTEGER REFERENCES portfolios(id) ON DELETE CASCADE,
                     ticker VARCHAR(50) NOT NULL,
                     shares FLOAT NOT NULL DEFAULT 0.0,
+                    buy_price FLOAT,
+                    last_price FLOAT,
+                    last_price_updated_at TIMESTAMP WITH TIME ZONE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
@@ -116,6 +119,18 @@ def init_db(database_url: str):
                         ALTER TABLE holdings
                             ADD COLUMN last_price FLOAT,
                             ADD COLUMN last_price_updated_at TIMESTAMP WITH TIME ZONE;
+                    END IF;
+                END $$;
+            """)
+            cur.execute("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'holdings' AND column_name = 'buy_price'
+                    ) THEN
+                        ALTER TABLE holdings ADD COLUMN buy_price FLOAT;
+                        UPDATE holdings SET buy_price = last_price WHERE buy_price IS NULL AND last_price IS NOT NULL;
                     END IF;
                 END $$;
             """)

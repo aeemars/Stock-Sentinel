@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from psycopg2.extras import RealDictCursor
 from db import get_db
 from app.dependencies import get_current_user
+from app.services.market import sync_user_holdings_prices
 from app.templates_config import render_template
 
 router = APIRouter(tags=["analytics"])
@@ -18,6 +19,13 @@ def analytics(
         cur.execute("SELECT id, name FROM portfolios WHERE user_id = %s ORDER BY id", (current_user.id,))
         portfolios = cur.fetchall()
         portfolio_ids = [p['id'] for p in portfolios]
+
+        # Dynamically sync prices from yfinance if stale (>120s) or missing
+        if portfolio_ids:
+            try:
+                sync_user_holdings_prices(current_user.id, conn, max_age_seconds=120)
+            except Exception:
+                pass
 
         # ── All holdings with prices ──
         holdings = []

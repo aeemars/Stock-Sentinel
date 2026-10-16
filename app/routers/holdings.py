@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from psycopg2.extras import RealDictCursor
-import yfinance as yf
 from db import get_db
+from app.services.market import fetch_single_ticker_price
 from app.dependencies import get_current_user, verify_csrf
 from app.session import flash
 
@@ -14,11 +14,13 @@ def create_holding(
     request: Request,
     ticker: str = Form(""),
     shares: str = Form(""),
+    buy_price: str = Form(""),
     current_user=Depends(get_current_user),
     conn=Depends(get_db)
 ):
     ticker = ticker.strip().upper()
     shares_str = shares.strip()
+    buy_price_str = buy_price.strip() if buy_price else ""
 
     if not ticker or not shares_str:
         flash(request, "Ticker and shares are required", "error")
@@ -32,15 +34,25 @@ def create_holding(
         flash(request, f"Invalid shares value: {str(e)}", "error")
         return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
 
-    snapshot_price = None
-    try:
-        snapshot_price = yf.Ticker(ticker).fast_info.get('lastPrice')
-        if not snapshot_price:
-            df = yf.download(ticker, period='1d', progress=False, multi_level_index=False)
-            if not df.empty:
-                snapshot_price = float(df['Close'].iloc[-1])
-    except Exception:
-        snapshot_price = None
+    # Parse optional user-specified buy price
+    entry_price = None
+    if buy_price_str:
+        try:
+            parsed_bp = float(buy_price_str)
+            if parsed_bp <= 0:
+                flash(request, "Buy price must be positive", "error")
+                return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
+            entry_price = parsed_bp
+        except ValueError:
+            flash(request, "Invalid buy price format", "error")
+            return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
+
+    # Fetch current dynamic market price from yfinance service
+    market_price = fetch_single_ticker_price(ticker)
+
+    # Fallback entry_price to market_price if user left it blank
+    if entry_price is None:
+        entry_price = market_price
 
     holding_id = None
     try:
@@ -52,7 +64,7 @@ def create_holding(
 
             shares_delta = shares_val
             cur.execute("""
-                SELECT id, shares FROM holdings
+                SELECT id, shares, buy_price, last_price FROM holdings
                 WHERE portfolio_id = %s AND ticker = %s
             """, (portfolio_id, ticker))
             existing_row = cur.fetchone()
@@ -60,15 +72,29 @@ def create_holding(
             if existing_row:
                 shares_prev = existing_row['shares']
                 shares_total = shares_prev + shares_delta
+                prev_buy_price = existing_row.get('buy_price') or existing_row.get('last_price') or entry_price
+
+                # Calculate weighted average buy price
+                if entry_price is not None:
+                    if prev_buy_price is not None and shares_prev > 0:
+                        new_buy_price = round(((shares_prev * prev_buy_price) + (shares_delta * entry_price)) / shares_total, 4)
+                    else:
+                        new_buy_price = entry_price
+                else:
+                    new_buy_price = prev_buy_price
 
                 cur.execute("""
                     UPDATE holdings
-                    SET shares = %s, updated_at = CURRENT_TIMESTAMP
+                    SET shares = %s,
+                        buy_price = %s,
+                        last_price = COALESCE(%s, last_price),
+                        last_price_updated_at = CASE WHEN %s IS NOT NULL THEN CURRENT_TIMESTAMP ELSE last_price_updated_at END,
+                        updated_at = CURRENT_TIMESTAMP
                     WHERE id = %s
-                """, (shares_total, existing_row['id']))
+                """, (shares_total, new_buy_price, market_price, market_price, existing_row['id']))
 
-                value_before = shares_prev * snapshot_price if snapshot_price is not None else None
-                value_after = shares_total * snapshot_price if snapshot_price is not None else None
+                value_before = shares_prev * prev_buy_price if prev_buy_price is not None else None
+                value_after = shares_total * new_buy_price if new_buy_price is not None else None
 
                 cur.execute("""
                     INSERT INTO holding_snapshots
@@ -82,21 +108,21 @@ def create_holding(
                     'add',
                     shares_delta,
                     shares_total,
-                    snapshot_price,
+                    entry_price,
                     value_before,
                     value_after,
                 ))
                 holding_id = existing_row['id']
             else:
                 cur.execute("""
-                    INSERT INTO holdings (portfolio_id, ticker, shares)
-                    VALUES (%s, %s, %s) RETURNING id
-                """, (portfolio_id, ticker, shares_delta))
+                    INSERT INTO holdings (portfolio_id, ticker, shares, buy_price, last_price, last_price_updated_at)
+                    VALUES (%s, %s, %s, %s, %s, CASE WHEN %s IS NOT NULL THEN CURRENT_TIMESTAMP ELSE NULL END) RETURNING id
+                """, (portfolio_id, ticker, shares_delta, entry_price, market_price, market_price))
                 new_holding = cur.fetchone()
                 holding_id = new_holding['id']
 
                 value_before = 0.0
-                value_after = shares_delta * snapshot_price if snapshot_price is not None else None
+                value_after = shares_delta * entry_price if entry_price is not None else None
 
                 cur.execute("""
                     INSERT INTO holding_snapshots
@@ -110,24 +136,14 @@ def create_holding(
                     'initial',
                     shares_delta,
                     shares_delta,
-                    snapshot_price,
+                    entry_price,
                     value_before,
                     value_after,
                 ))
 
         conn.commit()
 
-        if snapshot_price is not None and holding_id is not None:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """UPDATE holdings
-                       SET last_price = %s, last_price_updated_at = CURRENT_TIMESTAMP
-                       WHERE id = %s""",
-                    (snapshot_price, holding_id)
-                )
-            conn.commit()
-
-        price_str = f" @ ${snapshot_price:.2f}" if snapshot_price is not None else ""
+        price_str = f" @ ${entry_price:.2f}" if entry_price is not None else ""
         flash(request, f"Added {shares_val} shares of {ticker}{price_str} to portfolio", "success")
     except Exception as e:
         conn.rollback()

@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from psycopg2.extras import RealDictCursor
-import yfinance as yf
 from db import get_db
 from app.dependencies import get_current_user, verify_csrf
+from app.services.market import sync_portfolio_prices, calculate_holding_metrics
 from app.session import flash
 from app.templates_config import render_template
 
@@ -53,8 +53,19 @@ def view_portfolio(
             flash(request, "Portfolio not found", "error")
             return RedirectResponse(url=str(request.url_for("dashboard")), status_code=303)
 
-        cur.execute("SELECT * FROM holdings WHERE portfolio_id = %s", (portfolio_id,))
+    # Dynamically pull latest market prices from yfinance if stale (>60s) or missing
+    try:
+        sync_portfolio_prices(portfolio_id, conn, max_age_seconds=60)
+    except Exception:
+        pass
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT * FROM holdings WHERE portfolio_id = %s ORDER BY ticker ASC", (portfolio_id,))
         holdings = cur.fetchall()
+
+        total_cost = 0.0
+        total_market_value = 0.0
+        last_updated_at = None
 
         for holding in holdings:
             cur.execute("""
@@ -64,8 +75,21 @@ def view_portfolio(
             """, (holding['id'],))
             holding['history'] = cur.fetchall()
 
+            metrics = calculate_holding_metrics(holding)
+            holding.update(metrics)
+
+            total_cost += metrics['cost_basis']
+            total_market_value += metrics['market_value']
+
+            ts = holding.get('last_price_updated_at')
+            if ts and (last_updated_at is None or ts > last_updated_at):
+                last_updated_at = ts
+
         total_shares = sum(h['shares'] for h in holdings)
         unique_tickers = len(set(h['ticker'] for h in holdings))
+
+        total_pnl = round(total_market_value - total_cost, 2) if total_cost > 0 else 0.0
+        total_pnl_pct = round((total_pnl / total_cost) * 100, 2) if total_cost > 0 else 0.0
 
         cur.execute("SELECT COUNT(*) as count FROM alerts WHERE portfolio_id = %s", (portfolio_id,))
         row = cur.fetchone()
@@ -80,6 +104,11 @@ def view_portfolio(
             "total_shares": total_shares,
             "unique_tickers": unique_tickers,
             "recent_alerts": recent_alerts,
+            "total_cost": total_cost,
+            "total_market_value": total_market_value,
+            "total_pnl": total_pnl,
+            "total_pnl_pct": total_pnl_pct,
+            "last_updated_at": last_updated_at,
         }
     )
 
@@ -142,42 +171,83 @@ def refresh_prices(
             flash(request, "Portfolio not found", "error")
             return RedirectResponse(url=str(request.url_for("dashboard")), status_code=303)
 
-        cur.execute("SELECT id, ticker FROM holdings WHERE portfolio_id = %s", (portfolio_id,))
-        rows = cur.fetchall()
-
-    if not rows:
-        flash(request, "No holdings to refresh", "error")
-        return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
-
-    price_map = {}
-    for row in rows:
-        t = row['ticker']
-        try:
-            yf_price = yf.Ticker(t).fast_info.get('lastPrice')
-            if not yf_price:
-                df = yf.download(t, period='1d', progress=False, multi_level_index=False)
-                if not df.empty:
-                    yf_price = float(df['Close'].iloc[-1])
-            if yf_price:
-                price_map[t] = float(yf_price)
-        except Exception:
-            pass
-
     try:
-        with conn.cursor() as cur:
-            for row in rows:
-                price = price_map.get(row['ticker'])
-                if price is not None:
-                    cur.execute(
-                        """UPDATE holdings
-                           SET last_price = %s, last_price_updated_at = CURRENT_TIMESTAMP
-                           WHERE id = %s""",
-                        (price, row['id'])
-                    )
-        conn.commit()
-        flash(request, "Prices refreshed successfully", "success")
+        updated = sync_portfolio_prices(portfolio_id, conn, force=True)
+        if updated:
+            flash(request, f"Updated market prices for {len(updated)} stocks", "success")
+        else:
+            flash(request, "Prices refreshed successfully", "success")
     except Exception as e:
-        conn.rollback()
         flash(request, f"Error refreshing prices: {str(e)}", "error")
 
     return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
+
+
+@router.get("/portfolio/{portfolio_id}/live-prices", name="get_portfolio_live_prices")
+def get_portfolio_live_prices(
+    portfolio_id: int,
+    request: Request,
+    force: bool = False,
+    current_user=Depends(get_current_user),
+    conn=Depends(get_db)
+):
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT id FROM portfolios WHERE id = %s AND user_id = %s", (portfolio_id, current_user.id))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    # Sync any prices older than 15 seconds (or forced)
+    try:
+        sync_portfolio_prices(portfolio_id, conn, max_age_seconds=15, force=force)
+    except Exception:
+        pass
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT * FROM holdings WHERE portfolio_id = %s ORDER BY ticker ASC", (portfolio_id,))
+        holdings = cur.fetchall()
+
+    results = []
+    total_cost = 0.0
+    total_market_value = 0.0
+    latest_update = None
+
+    for h in holdings:
+        metrics = calculate_holding_metrics(h)
+        total_cost += metrics['cost_basis']
+        total_market_value += metrics['market_value']
+
+        ts = h.get('last_price_updated_at')
+        if ts and (latest_update is None or ts > latest_update):
+            latest_update = ts
+
+        results.append({
+            "id": h['id'],
+            "ticker": h['ticker'],
+            "shares": h['shares'],
+            "buy_price": round(h['buy_price'], 2) if h.get('buy_price') is not None else None,
+            "last_price": round(h['last_price'], 2) if h.get('last_price') is not None else None,
+            "cost_basis": metrics['cost_basis'],
+            "market_value": metrics['market_value'],
+            "pnl": metrics['pnl'],
+            "pnl_pct": metrics['pnl_pct'],
+            "updated_at": ts.strftime('%H:%M:%S') if ts else None
+        })
+
+    total_shares = sum(h['shares'] for h in holdings)
+    total_pnl = round(total_market_value - total_cost, 2) if total_cost > 0 else 0.0
+    total_pnl_pct = round((total_pnl / total_cost) * 100, 2) if total_cost > 0 else 0.0
+
+    return {
+        "status": "success",
+        "last_updated": latest_update.strftime('%H:%M:%S') if latest_update else "Live",
+        "summary": {
+            "total_holdings": len(results),
+            "total_shares": round(total_shares, 2),
+            "total_cost": total_cost,
+            "total_market_value": total_market_value,
+            "total_pnl": total_pnl,
+            "total_pnl_pct": total_pnl_pct
+        },
+        "holdings": results
+    }
+

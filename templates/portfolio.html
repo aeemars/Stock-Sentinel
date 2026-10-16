@@ -40,12 +40,21 @@
                     <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Total Shares</span>
                 </div>
                 <div class="flex flex-col gap-base mt-2">
-                    <span class="font-data-mono text-display-lg text-tertiary">{{ unique_tickers }}</span>
-                    <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Unique Tickers</span>
+                    <span id="summary-market-value" class="font-data-mono text-headline-md text-on-surface">${{ "%.2f"|format(total_market_value if total_market_value is defined else 0) }}</span>
+                    <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Market Value</span>
                 </div>
-                <div class="flex flex-col gap-base mt-2">
-                    <span class="font-data-mono text-display-lg text-error">{{ recent_alerts }}</span>
-                    <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Recent Alerts</span>
+                <div class="flex flex-col gap-base mt-2" id="summary-pnl-card">
+                    {% if total_pnl is defined and total_cost is defined and total_cost > 0 %}
+                        <span id="summary-pnl" class="font-data-mono text-headline-md {% if total_pnl >= 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">
+                            {{ "%+.2f"|format(total_pnl) }}
+                        </span>
+                        <span id="summary-pnl-pct" class="font-label-caps text-label-caps {% if total_pnl >= 0 %}text-emerald-400/80{% else %}text-rose-400/80{% endif %} uppercase">
+                            P&L ({{ "%+.1f"|format(total_pnl_pct) }}%)
+                        </span>
+                    {% else %}
+                        <span id="summary-pnl" class="font-data-mono text-headline-md text-tertiary">{{ unique_tickers }}</span>
+                        <span id="summary-pnl-pct" class="font-label-caps text-label-caps text-on-surface-variant uppercase">Unique Tickers</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -66,6 +75,16 @@
                     <label class="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-xs">Number of Shares</label>
                     <input name="shares" required step="0.01" min="0.01" class="w-full bg-surface-container-high border-b-2 border-outline-variant/30 text-on-surface font-body-sm text-body-sm px-sm py-sm focus:outline-none focus:border-secondary focus:bg-surface-container-highest transition-all rounded-t-DEFAULT input-glow" placeholder="e.g., 100" type="number"/>
                 </div>
+                <div>
+                    <label class="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-xs flex justify-between items-center">
+                        <span>Buy Price (USD)</span>
+                        <span class="text-outline text-[11px] normal-case font-normal">Optional (auto-fetches)</span>
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-sm flex items-center text-on-surface-variant font-data-mono text-body-sm">$</span>
+                        <input name="buy_price" step="0.01" min="0.01" class="w-full bg-surface-container-high border-b-2 border-outline-variant/30 text-on-surface font-body-sm text-body-sm pl-7 pr-sm py-sm focus:outline-none focus:border-secondary focus:bg-surface-container-highest transition-all rounded-t-DEFAULT input-glow" placeholder="e.g., 185.50" type="number"/>
+                    </div>
+                </div>
                 <button type="submit" class="w-full mt-sm py-sm rounded-lg border border-secondary/50 text-secondary font-body-sm text-body-sm font-semibold hover:bg-secondary/10 transition-colors flex justify-center items-center gap-xs">
                     <span class="material-symbols-outlined text-sm">add</span>
                     Add to Portfolio
@@ -76,22 +95,42 @@
 
     <!-- Holdings Table Canvas -->
     <div class="lg:col-span-8 glass-panel rounded-xl flex flex-col overflow-hidden relative">
-        <div class="flex items-center gap-xs p-lg border-b border-outline-variant/30 text-on-surface">
-            <span class="material-symbols-outlined text-primary">list_alt</span>
-            <h3 class="font-headline-md text-headline-md text-lg">Current Holdings</h3>
-            <form method="POST"
-                  action="/portfolio/{{ portfolio.id }}/refresh-prices"
-                  class="ml-auto">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <button type="submit"
+        <div class="flex flex-wrap items-center justify-between gap-sm p-lg border-b border-outline-variant/30 text-on-surface">
+            <div class="flex items-center gap-xs">
+                <span class="material-symbols-outlined text-primary">list_alt</span>
+                <h3 class="font-headline-md text-headline-md text-lg">Current Holdings</h3>
+            </div>
+            <div class="flex items-center gap-sm">
+                <!-- Dynamic Feed Status Pill -->
+                <div id="live-indicator" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span id="live-status-text">Dynamic Feed</span>
+                    <span id="live-timestamp" class="text-on-surface-variant/70 text-[10px]">
+                        {% if last_updated_at %}{{ last_updated_at.strftime('%H:%M:%S') }}{% else %}Synced{% endif %}
+                    </span>
+                </div>
+                <!-- Interactive Dynamic Refresh Button -->
+                <button id="btn-refresh-prices"
+                        type="button"
+                        onclick="refreshLivePrices(true)"
+                        title="Fetch dynamic market prices from Yahoo Finance"
                         class="flex items-center gap-xs px-sm py-xs rounded-lg
                                border border-outline-variant/30 text-on-surface-variant
                                font-body-sm text-body-sm hover:bg-surface-variant
-                               hover:text-primary transition-colors">
-                    <span class="material-symbols-outlined text-sm">refresh</span>
-                    Refresh Prices
+                               hover:text-primary transition-all cursor-pointer">
+                    <span id="refresh-spinner" class="material-symbols-outlined text-sm transition-transform">refresh</span>
+                    <span id="refresh-label">Refresh</span>
                 </button>
-            </form>
+                <form id="fallback-refresh-form"
+                      method="POST"
+                      action="/portfolio/{{ portfolio.id }}/refresh-prices"
+                      class="hidden">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                </form>
+            </div>
         </div>
         
         {% if holdings %}
@@ -102,15 +141,16 @@
                         <tr class="border-b border-outline-variant/30 bg-surface-container-low/50">
                             <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant">Ticker</th>
                             <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant">Shares</th>
-                            <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant">Price</th>
+                            <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant">Buy Price</th>
+                            <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant">Market Price</th>
                             <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant">Mkt Value</th>
-                            <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant">Added</th>
+                            <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant">Profit / Loss</th>
                             <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-outline-variant/20">
                         {% for holding in holdings %}
-                            <tr class="hover:bg-surface-container-highest/50 transition-colors group">
+                            <tr id="holding-row-{{ holding.id }}" data-id="{{ holding.id }}" data-ticker="{{ holding.ticker }}" class="hover:bg-surface-container-highest/50 transition-colors group">
                                 <td class="px-md py-sm">
                                     <div class="flex items-center gap-sm">
                                         <div class="w-8 h-8 rounded bg-primary-container text-on-primary-container flex items-center justify-center font-data-mono font-bold text-xs">
@@ -123,22 +163,41 @@
                                     <span class="bg-secondary-container/20 text-secondary border border-secondary/30 px-2 py-1 rounded font-data-mono text-body-sm">{{ holding.shares }}</span>
                                 </td>
                                 <td class="px-md py-sm">
-                                    {% if holding.last_price %}
-                                        <span class="font-data-mono text-body-sm text-primary">${{ "%.2f"|format(holding.last_price) }}</span>
+                                    {% if holding.buy_price %}
+                                        <span class="font-data-mono text-body-sm text-on-surface">${{ "%.2f"|format(holding.buy_price) }}</span>
                                     {% else %}
                                         <span class="font-data-mono text-label-caps text-on-surface-variant">&mdash;</span>
                                     {% endif %}
                                 </td>
                                 <td class="px-md py-sm">
                                     {% if holding.last_price %}
-                                        {% set mkt_val = holding.shares * holding.last_price %}
-                                        <span class="font-data-mono text-body-sm text-secondary">${{ "%.2f"|format(mkt_val) }}</span>
+                                        <span id="price-{{ holding.id }}" class="font-data-mono text-body-sm text-primary transition-all duration-300 px-1 py-0.5 rounded">${{ "%.2f"|format(holding.last_price) }}</span>
                                     {% else %}
-                                        <span class="font-data-mono text-label-caps text-on-surface-variant">&mdash;</span>
+                                        <span id="price-{{ holding.id }}" class="font-data-mono text-label-caps text-on-surface-variant px-1 py-0.5 rounded">&mdash;</span>
                                     {% endif %}
                                 </td>
                                 <td class="px-md py-sm">
-                                    <span class="font-data-mono text-label-caps text-on-surface-variant">{{ holding.created_at.strftime('%Y-%m-%d') if holding.created_at else 'N/A' }}</span>
+                                    {% if holding.market_value %}
+                                        <span id="mktval-{{ holding.id }}" class="font-data-mono text-body-sm text-secondary font-semibold transition-all duration-300 px-1 py-0.5 rounded">${{ "%.2f"|format(holding.market_value) }}</span>
+                                    {% else %}
+                                        <span id="mktval-{{ holding.id }}" class="font-data-mono text-label-caps text-on-surface-variant px-1 py-0.5 rounded">&mdash;</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-md py-sm">
+                                    <div id="pnl-wrapper-{{ holding.id }}">
+                                        {% if holding.pnl is not none %}
+                                            <div class="flex flex-col">
+                                                <span class="font-data-mono text-body-sm font-semibold {% if holding.pnl >= 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">
+                                                    {{ "%+.2f"|format(holding.pnl) }}
+                                                </span>
+                                                <span class="font-data-mono text-xs {% if holding.pnl >= 0 %}text-emerald-400/80{% else %}text-rose-400/80{% endif %}">
+                                                    ({{ "%+.2f"|format(holding.pnl_pct) }}%)
+                                                </span>
+                                            </div>
+                                        {% else %}
+                                            <span class="font-data-mono text-label-caps text-on-surface-variant">&mdash;</span>
+                                        {% endif %}
+                                    </div>
                                 </td>
                                 <td class="px-md py-sm text-right">
                                     <div class="flex justify-end gap-xs">
@@ -156,7 +215,7 @@
                             </tr>
                             {% if holding.history %}
                                 <tr class="bg-surface-container-low/40">
-                                    <td colspan="6" class="px-md py-sm">
+                                    <td colspan="7" class="px-md py-sm">
                                         <details class="group">
                                             <summary class="cursor-pointer text-on-surface-variant font-body-sm text-body-sm hover:text-on-surface transition-colors">
                                                 History ({{ holding.history|length }})
@@ -235,7 +294,7 @@
             <!-- Mobile Cards -->
             <div class="mobile-card flex flex-col gap-sm p-sm">
                 {% for holding in holdings %}
-                <div class="bg-surface-container-high/50 rounded-xl p-md border border-outline-variant/20">
+                <div id="mobile-card-{{ holding.id }}" class="bg-surface-container-high/50 rounded-xl p-md border border-outline-variant/20">
                     <div class="flex items-center justify-between mb-sm">
                         <div class="flex items-center gap-sm">
                             <div class="w-10 h-10 rounded-lg bg-primary-container text-on-primary-container flex items-center justify-center font-data-mono font-bold text-sm">
@@ -258,27 +317,40 @@
                             </form>
                         </div>
                     </div>
-                    <div class="grid grid-cols-3 gap-sm">
+                    <div class="grid grid-cols-2 gap-sm sm:grid-cols-4">
                         <div>
                             <span class="font-label-caps text-label-caps text-on-surface-variant block">Shares</span>
                             <span class="font-data-mono text-body-sm text-secondary">{{ holding.shares }}</span>
                         </div>
                         <div>
-                            <span class="font-label-caps text-label-caps text-on-surface-variant block">Price</span>
-                            {% if holding.last_price %}
-                                <span class="font-data-mono text-body-sm text-primary">${{ "%.2f"|format(holding.last_price) }}</span>
+                            <span class="font-label-caps text-label-caps text-on-surface-variant block">Buy Price</span>
+                            {% if holding.buy_price %}
+                                <span class="font-data-mono text-body-sm text-on-surface">${{ "%.2f"|format(holding.buy_price) }}</span>
                             {% else %}
                                 <span class="text-on-surface-variant">&mdash;</span>
                             {% endif %}
                         </div>
                         <div>
-                            <span class="font-label-caps text-label-caps text-on-surface-variant block">Value</span>
-                            {% if holding.last_price %}
-                                {% set mkt_val = holding.shares * holding.last_price %}
-                                <span class="font-data-mono text-body-sm text-secondary">${{ "%.2f"|format(mkt_val) }}</span>
-                            {% else %}
-                                <span class="text-on-surface-variant">&mdash;</span>
-                            {% endif %}
+                            <span class="font-label-caps text-label-caps text-on-surface-variant block">Market Price</span>
+                            <span id="mobile-price-{{ holding.id }}" class="font-data-mono text-body-sm text-primary transition-all duration-300">
+                                {% if holding.last_price %}
+                                    ${{ "%.2f"|format(holding.last_price) }}
+                                {% else %}
+                                    &mdash;
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div>
+                            <span class="font-label-caps text-label-caps text-on-surface-variant block">Profit / Loss</span>
+                            <div id="mobile-pnl-{{ holding.id }}">
+                                {% if holding.pnl is not none %}
+                                    <span class="font-data-mono text-body-sm font-semibold {% if holding.pnl >= 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">
+                                        {{ "%+.2f"|format(holding.pnl) }} ({{ "%+.1f"|format(holding.pnl_pct) }}%)
+                                    </span>
+                                {% else %}
+                                    <span class="text-on-surface-variant">&mdash;</span>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -299,3 +371,153 @@
     </div>
 </div>
 {% endblock %}
+
+{% block extra_js %}
+<script>
+let isRefreshing = false;
+const portfolioId = parseInt("{{ portfolio.id }}", 10);
+
+async function refreshLivePrices(force = false) {
+    if (isRefreshing) return;
+    isRefreshing = true;
+
+    const spinner = document.getElementById('refresh-spinner');
+    const label = document.getElementById('refresh-label');
+    const statusText = document.getElementById('live-status-text');
+    const timestamp = document.getElementById('live-timestamp');
+
+    if (spinner) spinner.classList.add('animate-spin');
+    if (label) label.textContent = 'Updating...';
+    if (statusText) statusText.textContent = 'Updating...';
+
+    try {
+        const url = `/portfolio/${portfolioId}/live-prices?force=${force ? 'true' : 'false'}`;
+        const res = await fetch(url, {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'same-origin'
+        });
+
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (data.status === 'success') {
+            updatePortfolioDOM(data);
+        }
+    } catch (err) {
+        console.warn('Failed to refresh live prices:', err);
+        if (statusText) statusText.textContent = 'Offline';
+    } finally {
+        if (spinner) spinner.classList.remove('animate-spin');
+        if (label) label.textContent = 'Refresh';
+        if (statusText) statusText.textContent = 'Dynamic Feed';
+        isRefreshing = false;
+    }
+}
+
+function updatePortfolioDOM(data) {
+    if (data.last_updated && document.getElementById('live-timestamp')) {
+        document.getElementById('live-timestamp').textContent = data.last_updated;
+    }
+
+    // Update Holdings
+    if (Array.isArray(data.holdings)) {
+        data.holdings.forEach(holding => {
+            const priceEl = document.getElementById(`price-${holding.id}`);
+            const mobilePriceEl = document.getElementById(`mobile-price-${holding.id}`);
+            const mktvalEl = document.getElementById(`mktval-${holding.id}`);
+            const pnlWrap = document.getElementById(`pnl-wrapper-${holding.id}`);
+            const mobilePnlWrap = document.getElementById(`mobile-pnl-${holding.id}`);
+
+            if (holding.last_price != null) {
+                const newPriceFormatted = `$${holding.last_price.toFixed(2)}`;
+                if (priceEl) {
+                    const oldPrice = parseFloat(priceEl.textContent.replace('$', '')) || 0;
+                    if (oldPrice > 0 && Math.abs(oldPrice - holding.last_price) > 0.001) {
+                        const flashClass = holding.last_price >= oldPrice ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300';
+                        priceEl.className = `font-data-mono text-body-sm transition-all duration-500 px-1 py-0.5 rounded ${flashClass}`;
+                        setTimeout(() => {
+                            priceEl.className = 'font-data-mono text-body-sm text-primary transition-all duration-500 px-1 py-0.5 rounded';
+                        }, 1500);
+                    }
+                    priceEl.textContent = newPriceFormatted;
+                }
+                if (mobilePriceEl) {
+                    mobilePriceEl.textContent = newPriceFormatted;
+                }
+            }
+
+            if (holding.market_value != null && mktvalEl) {
+                mktvalEl.textContent = `$${holding.market_value.toFixed(2)}`;
+            }
+
+            // P&L update
+            if (holding.pnl != null && holding.pnl_pct != null) {
+                const isPositive = holding.pnl >= 0;
+                const sign = isPositive ? '+' : '';
+                const pnlColor = isPositive ? 'text-emerald-400' : 'text-rose-400';
+                const pnlSubColor = isPositive ? 'text-emerald-400/80' : 'text-rose-400/80';
+
+                if (pnlWrap) {
+                    pnlWrap.innerHTML = `
+                        <div class="flex flex-col">
+                            <span class="font-data-mono text-body-sm font-semibold ${pnlColor}">
+                                ${sign}${holding.pnl.toFixed(2)}
+                            </span>
+                            <span class="font-data-mono text-xs ${pnlSubColor}">
+                                (${sign}${holding.pnl_pct.toFixed(2)}%)
+                            </span>
+                        </div>
+                    `;
+                }
+
+                if (mobilePnlWrap) {
+                    mobilePnlWrap.innerHTML = `
+                        <span class="font-data-mono text-body-sm font-semibold ${pnlColor}">
+                            ${sign}${holding.pnl.toFixed(2)} (${sign}${holding.pnl_pct.toFixed(1)}%)
+                        </span>
+                    `;
+                }
+            }
+        });
+    }
+
+    // Update Summary cards
+    if (data.summary) {
+        const sumMkt = document.getElementById('summary-market-value');
+        if (sumMkt && data.summary.total_market_value != null) {
+            sumMkt.textContent = `$${data.summary.total_market_value.toFixed(2)}`;
+        }
+
+        const sumPnl = document.getElementById('summary-pnl');
+        const sumPnlPct = document.getElementById('summary-pnl-pct');
+        if (sumPnl && data.summary.total_pnl != null && data.summary.total_cost > 0) {
+            const isPos = data.summary.total_pnl >= 0;
+            const sign = isPos ? '+' : '';
+            sumPnl.className = `font-data-mono text-headline-md ${isPos ? 'text-emerald-400' : 'text-rose-400'}`;
+            sumPnl.textContent = `${sign}${data.summary.total_pnl.toFixed(2)}`;
+
+            if (sumPnlPct && data.summary.total_pnl_pct != null) {
+                sumPnlPct.className = `font-label-caps text-label-caps ${isPos ? 'text-emerald-400/80' : 'text-rose-400/80'} uppercase`;
+                sumPnlPct.textContent = `P&L (${sign}${data.summary.total_pnl_pct.toFixed(1)}%)`;
+            }
+        }
+    }
+}
+
+// Auto-refresh dynamic prices every 45 seconds when page is focused
+let pollInterval = setInterval(() => {
+    if (!document.hidden) {
+        refreshLivePrices(false);
+    }
+}, 45000);
+
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        refreshLivePrices(false);
+    }
+});
+</script>
+{% endblock %}
+
