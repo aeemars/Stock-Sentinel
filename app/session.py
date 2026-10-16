@@ -54,6 +54,9 @@ class StockSentinelSessionMiddleware(BaseHTTPMiddleware):
         if "_csrf_token" not in request.state.session:
             request.state.session["_csrf_token"] = secrets.token_urlsafe(32)
 
+        # Snapshot session state to detect changes
+        initial_repr = str(sorted((k, str(v)) for k, v in request.state.session.items()))
+
         # Set request.endpoint convenience property for templates
         endpoint_func = request.scope.get("endpoint")
         name = endpoint_func.__name__ if endpoint_func and hasattr(endpoint_func, "__name__") else ""
@@ -65,9 +68,10 @@ class StockSentinelSessionMiddleware(BaseHTTPMiddleware):
 
         response: Response = await call_next(request)
 
-        # Persist session to cookie if modified or initialized
+        # Performance: Only re-serialize and set cookie if session was mutated or is new
         session_data = getattr(request.state, "session", {})
-        if session_data is not None:
+        current_repr = str(sorted((k, str(v)) for k, v in session_data.items()))
+        if current_repr != initial_repr or not cookie:
             token = dump_session(session_data)
             response.set_cookie(
                 key=SESSION_COOKIE_NAME,

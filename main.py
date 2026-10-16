@@ -54,10 +54,31 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+import time
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
+
+class PerformanceMiddleware(BaseHTTPMiddleware):
+    """Adds X-Response-Time and Server-Timing headers, plus HTTP caching for static assets."""
+    async def dispatch(self, request: Request, call_next):
+        t0 = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - t0) * 1000
+        response.headers["X-Response-Time"] = f"{duration_ms:.2f}ms"
+        response.headers["Server-Timing"] = f"app;dur={duration_ms:.2f}"
+
+        # Static Asset Caching: 1-year immutable caching for static files
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+
+        return response
+
 # Mount static assets
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Custom session & flash message middleware
+# Middlewares (Performance & Compression outermost, then Session)
+app.add_middleware(PerformanceMiddleware)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(StockSentinelSessionMiddleware)
 
 # Exception handlers matching Flask application behavior

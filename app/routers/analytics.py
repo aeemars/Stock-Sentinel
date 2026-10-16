@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from psycopg2.extras import RealDictCursor
 from db import get_db
 from app.dependencies import get_current_user
-from app.services.market import sync_user_holdings_prices
+from app.services.cache import cache
+from app.services.market import background_sync_user_prices
 from app.templates_config import render_template
 
 router = APIRouter(tags=["analytics"])
@@ -11,23 +12,26 @@ router = APIRouter(tags=["analytics"])
 @router.get("/analytics", name="analytics", response_model=None)
 def analytics(
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     conn=Depends(get_db)
 ):
+    cache_key = f"data:user:{current_user.id}:analytics"
+    cached_payload = cache.get(cache_key)
+    if cached_payload is not None:
+        return render_template("analytics.html", request, cached_payload)
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        # ── Portfolios ──
+        # ── Portfolios (indexed query) ──
         cur.execute("SELECT id, name FROM portfolios WHERE user_id = %s ORDER BY id", (current_user.id,))
         portfolios = cur.fetchall()
         portfolio_ids = [p['id'] for p in portfolios]
 
-        # Dynamically sync prices from yfinance if stale (>120s) or missing
+        # Stale-While-Revalidate: queue background price sync without blocking response
         if portfolio_ids:
-            try:
-                sync_user_holdings_prices(current_user.id, conn, max_age_seconds=120)
-            except Exception:
-                pass
+            background_tasks.add_task(background_sync_user_prices, current_user.id, 120)
 
-        # ── All holdings with prices ──
+        # ── All holdings with prices (indexed query) ──
         holdings = []
         if portfolio_ids:
             cur.execute("""
@@ -97,10 +101,7 @@ def analytics(
                     'count': alert_map.get(day, 0)
                 })
 
-    return render_template(
-        "analytics.html",
-        request,
-        {
+        payload = {
             "total_value": total_value,
             "total_holdings": total_holdings,
             "unique_tickers": unique_tickers,
@@ -109,4 +110,6 @@ def analytics(
             "alert_history": alert_history,
             "holdings": holdings,
         }
-    )
+        cache.set(cache_key, payload, ttl=45.0)
+
+    return render_template("analytics.html", request, payload)

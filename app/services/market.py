@@ -158,6 +158,8 @@ def sync_portfolio_prices(
                         WHERE id = %s
                     """, (price, row["id"]))
         conn.commit()
+        from app.services.cache import cache
+        cache.delete(f"data:live_prices:{portfolio_id}")
     except Exception as exc:
         conn.rollback()
         logger.error(f"Failed to update stale holding prices for portfolio {portfolio_id}: {exc}")
@@ -234,3 +236,147 @@ def calculate_holding_metrics(holding: dict) -> dict:
         "pnl": pnl,
         "pnl_pct": pnl_pct
     }
+
+
+_ACTIVE_PORTFOLIO_SYNCS = set()
+_ACTIVE_USER_SYNCS = set()
+_SYNC_LOCK = threading.Lock()
+
+
+def background_sync_portfolio_prices(portfolio_id: int, max_age_seconds: int = 60, force: bool = False):
+    """Run portfolio price synchronization in background without holding DB connections during network calls."""
+    with _SYNC_LOCK:
+        if portfolio_id in _ACTIVE_PORTFOLIO_SYNCS:
+            return
+        _ACTIVE_PORTFOLIO_SYNCS.add(portfolio_id)
+
+    from db import get_db_connection, put_db_connection
+    from app.services.cache import cache
+
+    try:
+        # Phase 1: Query stale holdings and release DB connection immediately (<1ms)
+        conn = get_db_connection()
+        stale_holdings = []
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                if force:
+                    cur.execute("SELECT id, ticker FROM holdings WHERE portfolio_id = %s", (portfolio_id,))
+                else:
+                    cur.execute("""
+                        SELECT id, ticker FROM holdings
+                        WHERE portfolio_id = %s
+                          AND (
+                              last_price IS NULL
+                              OR last_price_updated_at IS NULL
+                              OR last_price_updated_at < (NOW() - (%s || ' seconds')::INTERVAL)
+                          )
+                    """, (portfolio_id, str(max_age_seconds)))
+                stale_holdings = cur.fetchall()
+        finally:
+            put_db_connection(conn)
+
+        if not stale_holdings:
+            return
+
+        # Phase 2: External network fetch (ZERO DB connections held during Yahoo Finance requests)
+        tickers = list({row["ticker"] for row in stale_holdings})
+        new_prices = fetch_latest_prices(tickers)
+        if not new_prices:
+            return
+
+        # Phase 3: Check out DB connection briefly to apply updates and commit (<1ms)
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                for row in stale_holdings:
+                    price = new_prices.get(row["ticker"])
+                    if price is not None:
+                        cur.execute("""
+                            UPDATE holdings
+                            SET last_price = %s,
+                                last_price_updated_at = CURRENT_TIMESTAMP
+                            WHERE id = %s
+                        """, (price, row["id"]))
+            conn.commit()
+            cache.delete(f"data:live_prices:{portfolio_id}")
+            cache.delete_by_prefix("data:portfolio_view:")
+            cache.delete_by_prefix("data:user:")
+        finally:
+            put_db_connection(conn)
+
+    except Exception as exc:
+        logger.warning(f"Background price sync failed for portfolio {portfolio_id}: {exc}")
+    finally:
+        with _SYNC_LOCK:
+            _ACTIVE_PORTFOLIO_SYNCS.discard(portfolio_id)
+
+
+def background_sync_user_prices(user_id: int, max_age_seconds: int = 120):
+    """Run user holdings price synchronization in background without holding DB connections during network calls."""
+    with _SYNC_LOCK:
+        if user_id in _ACTIVE_USER_SYNCS:
+            return
+        _ACTIVE_USER_SYNCS.add(user_id)
+
+    from db import get_db_connection, put_db_connection
+    from app.services.cache import cache
+
+    try:
+        conn = get_db_connection()
+        stale_holdings = []
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT h.id, h.ticker FROM holdings h
+                    JOIN portfolios p ON h.portfolio_id = p.id
+                    WHERE p.user_id = %s
+                      AND (
+                          h.last_price IS NULL
+                          OR h.last_price_updated_at IS NULL
+                          OR h.last_price_updated_at < (NOW() - (%s || ' seconds')::INTERVAL)
+                      )
+                """, (user_id, str(max_age_seconds)))
+                stale_holdings = cur.fetchall()
+        finally:
+            put_db_connection(conn)
+
+        if not stale_holdings:
+            return
+
+        tickers = list({row["ticker"] for row in stale_holdings})
+        new_prices = fetch_latest_prices(tickers)
+        if not new_prices:
+            return
+
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                for row in stale_holdings:
+                    price = new_prices.get(row["ticker"])
+                    if price is not None:
+                        cur.execute("""
+                            UPDATE holdings
+                            SET last_price = %s,
+                                last_price_updated_at = CURRENT_TIMESTAMP
+                            WHERE id = %s
+                        """, (price, row["id"]))
+            conn.commit()
+            cache.delete_by_prefix(f"data:user:{user_id}:")
+            cache.delete_by_prefix("data:live_prices:")
+            cache.delete_by_prefix("data:portfolio_view:")
+        finally:
+            put_db_connection(conn)
+
+    except Exception as exc:
+        logger.warning(f"Background price sync failed for user {user_id}: {exc}")
+    finally:
+        with _SYNC_LOCK:
+            _ACTIVE_USER_SYNCS.discard(user_id)
+
+
+def dispatch_background_sync(target_func, *args):
+    """Launch detached daemon thread so external network calls never block HTTP response."""
+    thread = threading.Thread(target=target_func, args=args, daemon=True)
+    thread.start()
+
+

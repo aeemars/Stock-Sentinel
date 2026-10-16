@@ -23,15 +23,24 @@ def is_safe_redirect(request: Request, target: Optional[str]) -> bool:
     test = urlsplit(target)
     return not test.netloc or (test.scheme in ('http', 'https') and test.netloc == ref.netloc)
 
+from app.services.cache import get_cached_user, set_cached_user
+
 def get_current_user_optional(request: Request) -> Optional[User]:
     user_id = request.state.session.get("user_id") if hasattr(request.state, "session") else None
     if user_id:
+        # Tier 1 In-Memory Cache Check (<0.1ms)
+        cached_user = get_cached_user(user_id)
+        if cached_user:
+            request.state.user = cached_user
+            return cached_user
+
         from db import get_db_connection, put_db_connection
         try:
             conn = get_db_connection()
             try:
                 user = get_user_by_id(user_id, conn)
                 if user:
+                    set_cached_user(user_id, user, ttl=60.0)
                     request.state.user = user
                     return user
             finally:

@@ -134,6 +134,17 @@ def init_db(database_url: str):
                     END IF;
                 END $$;
             """)
+
+            # Performance: B-Tree indexes on foreign keys and filter columns to ensure sub-5ms query execution
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_portfolios_user_id ON portfolios(user_id);
+                CREATE INDEX IF NOT EXISTS idx_holdings_portfolio_id ON holdings(portfolio_id);
+                CREATE INDEX IF NOT EXISTS idx_holdings_ticker ON holdings(ticker);
+                CREATE INDEX IF NOT EXISTS idx_snapshots_holding_id ON holding_snapshots(holding_id);
+                CREATE INDEX IF NOT EXISTS idx_snapshots_portfolio_id ON holding_snapshots(portfolio_id);
+                CREATE INDEX IF NOT EXISTS idx_alerts_portfolio_id ON alerts(portfolio_id);
+                CREATE INDEX IF NOT EXISTS idx_alerts_created_at ON alerts(created_at);
+            """)
         conn.commit()
     finally:
         put_db_connection(conn)

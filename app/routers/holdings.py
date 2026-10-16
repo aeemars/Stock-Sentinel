@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from psycopg2.extras import RealDictCursor
 from db import get_db
+from app.services.cache import cache
 from app.services.market import fetch_single_ticker_price
 from app.dependencies import get_current_user, verify_csrf
 from app.session import flash
@@ -142,6 +143,8 @@ def create_holding(
                 ))
 
         conn.commit()
+        cache.delete_by_prefix(f"data:user:{current_user.id}:")
+        cache.delete(f"data:live_prices:{portfolio_id}")
 
         price_str = f" @ ${entry_price:.2f}" if entry_price is not None else ""
         flash(request, f"Added {shares_val} shares of {ticker}{price_str} to portfolio", "success")
@@ -178,6 +181,9 @@ def delete_holding(
             cur.execute("DELETE FROM holdings WHERE id = %s", (holding_id,))
 
         conn.commit()
+        cache.delete_by_prefix(f"data:user:{current_user.id}:")
+        if portfolio_id:
+            cache.delete(f"data:live_prices:{portfolio_id}")
         flash(request, f"Removed {ticker} from portfolio", "success")
     except Exception as e:
         conn.rollback()

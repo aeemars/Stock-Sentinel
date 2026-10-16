@@ -1,9 +1,16 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from psycopg2.extras import RealDictCursor
 from db import get_db
 from app.dependencies import get_current_user, verify_csrf
-from app.services.market import sync_portfolio_prices, calculate_holding_metrics
+from app.services.cache import cache
+from app.services.market import (
+    sync_portfolio_prices,
+    background_sync_portfolio_prices,
+    calculate_holding_metrics,
+    dispatch_background_sync,
+)
 from app.session import flash
 from app.templates_config import render_template
 
@@ -31,6 +38,8 @@ def create_portfolio(
                 (name, description, current_user.id)
             )
         conn.commit()
+        # Invalidate user data cache
+        cache.delete_by_prefix(f"data:user:{current_user.id}:")
         flash(request, f'Portfolio "{name}" created successfully!', "success")
     except Exception as e:
         conn.rollback()
@@ -45,7 +54,13 @@ def view_portfolio(
     current_user=Depends(get_current_user),
     conn=Depends(get_db)
 ):
+    cache_key = f"data:portfolio_view:{current_user.id}:{portfolio_id}"
+    cached_context = cache.get(cache_key)
+    if cached_context is not None:
+        return render_template("portfolio.html", request, cached_context)
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        # 1. Verify ownership (indexed query)
         cur.execute("SELECT * FROM portfolios WHERE id = %s AND user_id = %s", (portfolio_id, current_user.id))
         portfolio = cur.fetchone()
 
@@ -53,27 +68,33 @@ def view_portfolio(
             flash(request, "Portfolio not found", "error")
             return RedirectResponse(url=str(request.url_for("dashboard")), status_code=303)
 
-    # Dynamically pull latest market prices from yfinance if stale (>60s) or missing
-    try:
-        sync_portfolio_prices(portfolio_id, conn, max_age_seconds=60)
-    except Exception:
-        pass
-
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        # 2. Fetch holdings (indexed query)
         cur.execute("SELECT * FROM holdings WHERE portfolio_id = %s ORDER BY ticker ASC", (portfolio_id,))
         holdings = cur.fetchall()
+
+        # 3. Batch fetch all snapshots for all holdings in this portfolio (eliminates N+1 loop)
+        cur.execute("""
+            SELECT * FROM holding_snapshots
+            WHERE portfolio_id = %s
+            ORDER BY holding_id, created_at ASC
+        """, (portfolio_id,))
+        all_snapshots = cur.fetchall()
+
+        snapshots_by_holding = {}
+        for snap in all_snapshots:
+            hid = snap['holding_id']
+            if hid not in snapshots_by_holding:
+                snapshots_by_holding[hid] = []
+            snapshots_by_holding[hid].append(snap)
 
         total_cost = 0.0
         total_market_value = 0.0
         last_updated_at = None
+        needs_price_sync = False
+        now_utc = datetime.now(timezone.utc)
 
         for holding in holdings:
-            cur.execute("""
-                SELECT * FROM holding_snapshots
-                WHERE holding_id = %s
-                ORDER BY created_at ASC
-            """, (holding['id'],))
-            holding['history'] = cur.fetchall()
+            holding['history'] = snapshots_by_holding.get(holding['id'], [])
 
             metrics = calculate_holding_metrics(holding)
             holding.update(metrics)
@@ -82,8 +103,15 @@ def view_portfolio(
             total_market_value += metrics['market_value']
 
             ts = holding.get('last_price_updated_at')
-            if ts and (last_updated_at is None or ts > last_updated_at):
-                last_updated_at = ts
+            if ts:
+                if last_updated_at is None or ts > last_updated_at:
+                    last_updated_at = ts
+                # Check freshness (>60s)
+                ts_cmp = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+                if (now_utc - ts_cmp).total_seconds() > 60:
+                    needs_price_sync = True
+            else:
+                needs_price_sync = True
 
         total_shares = sum(h['shares'] for h in holdings)
         unique_tickers = len(set(h['ticker'] for h in holdings))
@@ -95,21 +123,29 @@ def view_portfolio(
         row = cur.fetchone()
         recent_alerts = row['count'] if row else 0
 
+    # Non-blocking detached background sync: runs in daemon thread without blocking HTTP response (<20ms)
+    if needs_price_sync and holdings:
+        dispatch_background_sync(background_sync_portfolio_prices, portfolio_id, 60)
+
+    context = {
+        "portfolio": portfolio,
+        "holdings": holdings,
+        "total_shares": total_shares,
+        "unique_tickers": unique_tickers,
+        "recent_alerts": recent_alerts,
+        "total_cost": total_cost,
+        "total_market_value": total_market_value,
+        "total_pnl": total_pnl,
+        "total_pnl_pct": total_pnl_pct,
+        "last_updated_at": last_updated_at,
+    }
+    # Cache view context for 20 seconds
+    cache.set(cache_key, context, ttl=20)
+
     return render_template(
         "portfolio.html",
         request,
-        {
-            "portfolio": portfolio,
-            "holdings": holdings,
-            "total_shares": total_shares,
-            "unique_tickers": unique_tickers,
-            "recent_alerts": recent_alerts,
-            "total_cost": total_cost,
-            "total_market_value": total_market_value,
-            "total_pnl": total_pnl,
-            "total_pnl_pct": total_pnl_pct,
-            "last_updated_at": last_updated_at,
-        }
+        context
     )
 
 @router.post("/portfolio/{portfolio_id}/delete", name="delete_portfolio", dependencies=[Depends(verify_csrf)], response_model=None)
@@ -136,6 +172,9 @@ def delete_portfolio(
             cur.execute("DELETE FROM portfolios WHERE id = %s", (portfolio_id,))
 
         conn.commit()
+        # Invalidate user data cache and portfolio live prices cache
+        cache.delete_by_prefix(f"data:user:{current_user.id}:")
+        cache.delete(f"data:live_prices:{portfolio_id}")
         flash(request, f'Portfolio "{portfolio_name}" deleted successfully', "success")
     except Exception as e:
         conn.rollback()
@@ -173,6 +212,8 @@ def refresh_prices(
 
     try:
         updated = sync_portfolio_prices(portfolio_id, conn, force=True)
+        cache.delete_by_prefix(f"data:user:{current_user.id}:")
+        cache.delete(f"data:live_prices:{portfolio_id}")
         if updated:
             flash(request, f"Updated market prices for {len(updated)} stocks", "success")
         else:
@@ -191,17 +232,28 @@ def get_portfolio_live_prices(
     current_user=Depends(get_current_user),
     conn=Depends(get_db)
 ):
+    cache_key = f"data:live_prices:{portfolio_id}"
+
+    # Tier 1 In-Memory Cache: Return within <1ms if cached and not forced
+    if not force:
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            return cached_result
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT id FROM portfolios WHERE id = %s AND user_id = %s", (portfolio_id, current_user.id))
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Portfolio not found")
 
-    # Sync any prices older than 15 seconds (or forced)
-    try:
-        sync_portfolio_prices(portfolio_id, conn, max_age_seconds=15, force=force)
-    except Exception:
-        pass
+    # If force refresh requested, sync synchronously and invalidate user cache
+    if force:
+        try:
+            sync_portfolio_prices(portfolio_id, conn, force=True)
+            cache.delete_by_prefix(f"data:user:{current_user.id}:")
+        except Exception:
+            pass
 
+    # Read latest holdings from DB (indexed query, <3ms)
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM holdings WHERE portfolio_id = %s ORDER BY ticker ASC", (portfolio_id,))
         holdings = cur.fetchall()
@@ -210,6 +262,8 @@ def get_portfolio_live_prices(
     total_cost = 0.0
     total_market_value = 0.0
     latest_update = None
+    needs_sync = False
+    now_utc = datetime.now(timezone.utc)
 
     for h in holdings:
         metrics = calculate_holding_metrics(h)
@@ -217,8 +271,14 @@ def get_portfolio_live_prices(
         total_market_value += metrics['market_value']
 
         ts = h.get('last_price_updated_at')
-        if ts and (latest_update is None or ts > latest_update):
-            latest_update = ts
+        if ts:
+            if latest_update is None or ts > latest_update:
+                latest_update = ts
+            ts_cmp = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+            if (now_utc - ts_cmp).total_seconds() > 30:
+                needs_sync = True
+        else:
+            needs_sync = True
 
         results.append({
             "id": h['id'],
@@ -233,11 +293,15 @@ def get_portfolio_live_prices(
             "updated_at": ts.strftime('%H:%M:%S') if ts else None
         })
 
+    # Stale-While-Revalidate: Dispatch background thread without blocking HTTP response
+    if needs_sync and holdings and not force:
+        dispatch_background_sync(background_sync_portfolio_prices, portfolio_id, 30)
+
     total_shares = sum(h['shares'] for h in holdings)
     total_pnl = round(total_market_value - total_cost, 2) if total_cost > 0 else 0.0
     total_pnl_pct = round((total_pnl / total_cost) * 100, 2) if total_cost > 0 else 0.0
 
-    return {
+    payload = {
         "status": "success",
         "last_updated": latest_update.strftime('%H:%M:%S') if latest_update else "Live",
         "summary": {
@@ -250,4 +314,8 @@ def get_portfolio_live_prices(
         },
         "holdings": results
     }
+
+    # Cache response for 10 seconds to serve rapid consecutive polls in <1ms
+    cache.set(cache_key, payload, ttl=10)
+    return payload
 

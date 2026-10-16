@@ -6,6 +6,7 @@ from db import get_db
 from app.session import flash
 from app.auth import User, hash_password, check_password, get_user_with_hash
 from app.dependencies import get_current_user_optional, get_current_user, verify_csrf, is_safe_redirect
+from app.services.cache import set_cached_user, invalidate_user_cache
 from app.templates_config import render_template
 
 router = APIRouter(tags=["auth"])
@@ -107,6 +108,7 @@ def login_action(
 
     request.state.session["user_id"] = user.id
     request.state.user = user
+    set_cached_user(user.id, user)
     flash(request, f"Welcome back, {user.username}!", "success")
 
     if next_url and is_safe_redirect(request, next_url):
@@ -115,6 +117,8 @@ def login_action(
 
 @router.get("/logout", name="logout", response_model=None)
 def logout(request: Request, current_user=Depends(get_current_user)):
-    request.state.session.pop("user_id", None)
+    user_id = request.state.session.pop("user_id", None)
+    if user_id:
+        invalidate_user_cache(user_id)
     flash(request, "You have been signed out.", "success")
     return RedirectResponse(url=str(request.url_for("login")), status_code=303)
