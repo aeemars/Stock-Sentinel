@@ -22,7 +22,17 @@ from app.routers.api import router as api_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: initialize database schema & pool
-    init_db(settings.effective_database_url)
+    try:
+        init_db(settings.effective_database_url)
+    except Exception as exc:
+        print("\n" + "=" * 60)
+        print("❌ DATABASE CONNECTION ERROR:")
+        print(f"Could not connect to database: {settings.effective_database_url}")
+        print("Please ensure your PostgreSQL database is running and configured in .env.")
+        print("See README.md for Docker quickstart instructions:")
+        print("  docker run --name stocks-postgres -e POSTGRES_USER=aeem -e POSTGRES_PASSWORD=bunymide -e POSTGRES_DB=stocks_db -p 5432:5432 -d postgres")
+        print("=" * 60 + "\n")
+        raise exc
 
     # Start background scheduler if not in serverless environment
     scheduler = None
