@@ -3,6 +3,26 @@
 <head>
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <script>
+        // Intercept and suppress external browser extension injection errors (e.g. Zerion/MetaMask wallet collisions)
+        window.addEventListener('unhandledrejection', function(event) {
+            var reason = event.reason;
+            if (reason) {
+                var msg = (reason.message || String(reason)).toLowerCase();
+                var stack = (reason.stack || '').toLowerCase();
+                if (msg.includes('iszerion') || msg.includes('window.ethereum') || stack.includes('in-page.js')) {
+                    event.preventDefault();
+                }
+            }
+        });
+        window.addEventListener('error', function(event) {
+            var msg = (event.message || '').toLowerCase();
+            var filename = (event.filename || '').toLowerCase();
+            if (msg.includes('iszerion') || msg.includes('window.ethereum') || filename.includes('in-page.js')) {
+                event.preventDefault();
+            }
+        });
+    </script>
     <title>{% block title %}Stock Sentinel{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"/>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>

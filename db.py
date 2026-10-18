@@ -26,6 +26,13 @@ def normalize_database_url(database_url: str) -> str:
     if hostname.endswith('.neon.tech') and 'sslmode' not in query and 'sslrootcert' not in query:
         query['sslmode'] = 'require'
 
+    # Set TCP keepalive parameters so idle connections are kept alive by cloud providers/Neon
+    if 'keepalives' not in query:
+        query['keepalives'] = '1'
+        query['keepalives_idle'] = '30'
+        query['keepalives_interval'] = '10'
+        query['keepalives_count'] = '3'
+
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment))
 
 def init_db(database_url: str):
@@ -152,11 +159,37 @@ def init_db(database_url: str):
 def get_db_connection():
     if _pool is None:
         raise RuntimeError("Database not initialized. Call init_db first.")
+
+    for attempt in range(3):
+        conn = _pool.getconn()
+        try:
+            if conn.closed != 0:
+                raise psycopg2.OperationalError("Connection is closed")
+            # Verify socket liveness
+            conn.poll()
+            if conn.status == psycopg2.extensions.STATUS_IN_TRANSACTION:
+                conn.rollback()
+            return conn
+        except (psycopg2.OperationalError, psycopg2.InterfaceError, Exception):
+            # Dead or broken pooled connection - close and remove from pool
+            try:
+                _pool.putconn(conn, close=True)
+            except Exception:
+                pass
+            if attempt == 2:
+                raise
+
     return _pool.getconn()
 
-def put_db_connection(conn):
+def put_db_connection(conn, close=False):
     if _pool is not None and conn is not None:
-        _pool.putconn(conn)
+        try:
+            if conn.closed != 0:
+                _pool.putconn(conn, close=True)
+            else:
+                _pool.putconn(conn, close=close)
+        except Exception:
+            pass
 
 def get_db():
     """FastAPI dependency yielding a pooled DB connection."""
