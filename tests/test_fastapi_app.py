@@ -183,7 +183,7 @@ def test_support_contact_endpoint():
     assert resp_success.status_code == 200
     data = resp_success.json()
     assert data["status"] == "success"
-    assert "sent to the developer" in data["message"]
+    assert "The support team will get back to you shortly" in data["message"]
 
     client.cookies.clear()
 

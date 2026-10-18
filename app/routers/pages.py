@@ -50,8 +50,8 @@ async def support_contact(
         message,
     )
 
-    success_msg = "Your message has been sent to the developer! We will get back to you shortly."
-    flash(request, success_msg, "success")
+    success_msg = "The support team will get back to you shortly."
+    flash(request, f"Success! {success_msg}", "success")
 
     if request.headers.get("accept") == "application/json":
         return JSONResponse({"status": "success", "message": success_msg})

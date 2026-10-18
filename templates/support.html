@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.disabled = true;
         icon.textContent = 'hourglass_empty';
         icon.classList.add('animate-spin');
-        text.textContent = 'Delivering via SendByte...';
+        text.textContent = 'Sending message...';
         statusBox.className = 'hidden';
 
         try {
@@ -212,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (resp.ok && data.status === 'success') {
                 statusBox.className = 'px-md py-sm rounded-lg text-xs font-body-sm flex items-center justify-between gap-sm border bg-emerald-500/10 border-emerald-500/40 text-emerald-300';
-                statusText.innerHTML = `<strong>Success!</strong> ${data.message || 'Your message was delivered to the developer.'}`;
+                statusText.innerHTML = `<strong>Success!</strong> ${data.message || 'The support team will get back to you shortly.'}`;
                 form.reset();
             } else {
                 const errMsg = data.detail || 'Failed to send message. Please try again.';
@@ -226,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.disabled = false;
             icon.textContent = 'send';
             icon.classList.remove('animate-spin');
-            text.textContent = 'Send Message to Developer';
+            text.textContent = 'Send Message to Support';
         }
     });
 });
