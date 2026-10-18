@@ -16,6 +16,19 @@ class Settings(BaseSettings):
     ENVIRONMENT: Optional[str] = None
     VERCEL: Optional[str] = None
 
+    # SendByte Transactional & Inbound Email Service
+    SENDBYTE_API_KEY: Optional[str] = None
+    SENDBYTE_FROM_EMAIL: str = "Stock Sentinel <notifications@sendbyte.africa>"
+    DEV_NOTIFICATION_EMAIL: Optional[str] = None
+    SENDBYTE_WEBHOOK_SECRET: Optional[str] = None
+
+    # Standard SMTP (e.g. Gmail App Password)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_USE_TLS: bool = True
+
     @property
     def effective_database_url(self) -> str:
         return (

@@ -39,28 +39,196 @@
 
     <!-- Contact & Documentation Box -->
     <div class="flex flex-col gap-gutter">
-        <div class="glass-card rounded-xl p-lg flex flex-col gap-md border-l-4 border-secondary">
-            <h3 class="font-headline-md text-headline-md text-lg text-on-surface">Documentation</h3>
-            <p class="font-body-sm text-on-surface-variant">Check out the full API documentation and setup guides in the GitHub repository.</p>
-            <a href="#" class="flex items-center gap-xs text-secondary hover:underline w-fit font-body-sm font-semibold">
-                <span class="material-symbols-outlined text-sm">menu_book</span>
-                Read the Docs
-            </a>
+        <!-- Enhanced GitHub Documentation Card -->
+        <div class="glass-card rounded-xl p-lg flex flex-col gap-md border border-outline-variant/30 relative overflow-hidden group hover:border-primary/50 transition-all duration-300">
+            <div class="flex items-start justify-between gap-sm">
+                <div class="flex items-center gap-sm">
+                    <div class="w-10 h-10 rounded-lg bg-surface-container-high border border-outline-variant/40 flex items-center justify-center text-on-surface">
+                        <svg class="w-6 h-6 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-xs">
+                            <h3 class="font-headline-md text-headline-md text-lg text-on-surface">aeemars/Stock-Sentinel</h3>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-data-mono">Public</span>
+                        </div>
+                        <p class="font-body-sm text-on-surface-variant text-xs">Autonomous AI stock monitoring, sentiment, &amp; forecasting pipeline</p>
+                    </div>
+                </div>
+            </div>
+
+            <p class="font-body-sm text-on-surface-variant leading-relaxed">
+                Explore the full architecture, ROMA multi-agent documentation, database schema definitions, and production deployment guides directly on GitHub.
+            </p>
+
+            <!-- Topic Chips -->
+            <div class="flex flex-wrap gap-xs">
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-high/60 border border-outline-variant/30 text-xs text-on-surface font-medium">
+                    <span class="material-symbols-outlined text-xs text-primary">smart_toy</span> ROMA AI Framework
+                </span>
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-high/60 border border-outline-variant/30 text-xs text-on-surface font-medium">
+                    <span class="material-symbols-outlined text-xs text-emerald-400">bolt</span> Sub-60ms Engine
+                </span>
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-high/60 border border-outline-variant/30 text-xs text-on-surface font-medium">
+                    <span class="material-symbols-outlined text-xs text-tertiary">analytics</span> Neynar Sentiment
+                </span>
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-high/60 border border-outline-variant/30 text-xs text-on-surface font-medium">
+                    <span class="material-symbols-outlined text-xs text-secondary">menu_book</span> API Reference
+                </span>
+            </div>
+
+            <!-- Primary Action -->
+            <div class="pt-xs flex items-center gap-sm">
+                <a href="https://github.com/aeemars/Stock-Sentinel" target="_blank" rel="noopener noreferrer" class="flex-1 flex items-center justify-center gap-xs px-md py-sm rounded-lg bg-surface-container-high border border-outline-variant/40 text-on-surface hover:text-primary hover:border-primary/50 transition-all font-body-sm font-semibold group shadow-sm hover:shadow-[0_0_20px_rgba(173,198,255,0.15)]">
+                    <span class="material-symbols-outlined text-base">menu_book</span>
+                    <span>Read the Docs on GitHub</span>
+                    <span class="material-symbols-outlined text-sm group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform text-primary">open_in_new</span>
+                </a>
+                <a href="https://github.com/aeemars/Stock-Sentinel" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-xs px-sm py-sm rounded-lg bg-surface-container-high/60 border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:border-outline-variant/60 transition-all font-body-sm text-xs font-semibold" title="Star this repository on GitHub">
+                    <span class="material-symbols-outlined text-sm text-tertiary">star</span>
+                    <span>Star</span>
+                </a>
+            </div>
         </div>
         
-        <div class="glass-card rounded-xl p-lg flex flex-col gap-md">
-            <h3 class="font-headline-md text-headline-md text-lg text-on-surface">Contact Us</h3>
-            <p class="font-body-sm text-on-surface-variant">Still stuck? Send us a message and our support team will get back to you within 24 hours.</p>
+        <!-- Redesigned Contact Developer Form (SendByte Email Service) -->
+        <div class="glass-card rounded-xl p-lg flex flex-col gap-md border border-outline-variant/30 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-xs">
+                    <span class="material-symbols-outlined text-primary">mail</span>
+                    <h3 class="font-headline-md text-headline-md text-lg text-on-surface">Contact the Developer</h3>
+                </div>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span> Direct Inbox
+                </span>
+            </div>
             
-            <form class="flex flex-col gap-sm" onsubmit="event.preventDefault(); alert('Message sent!');">
-                <input required type="text" class="w-full bg-surface-container-high border-b border-outline-variant/30 text-on-surface font-body-sm text-body-sm px-sm py-xs focus:outline-none focus:border-primary focus:bg-surface-container-highest transition-all input-glow" placeholder="Subject"/>
-                <textarea required rows="4" class="w-full bg-surface-container-high border-b border-outline-variant/30 text-on-surface font-body-sm text-body-sm px-sm py-xs focus:outline-none focus:border-primary focus:bg-surface-container-highest transition-all input-glow resize-none" placeholder="Describe your issue..."></textarea>
-                <button type="submit" class="mt-xs py-sm rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary-fixed transition-colors flex justify-center items-center gap-xs shadow-[0_0_15px_rgba(173,198,255,0.2)]">
-                    <span class="material-symbols-outlined text-sm">send</span>
-                    Send Message
+            <p class="font-body-sm text-on-surface-variant">
+                Have a complaint, found a bug, or need technical help? Send your message directly to the developer's inbox.
+            </p>
+
+            <!-- Sender Identity Context -->
+            <div class="flex items-center gap-sm px-sm py-xs bg-surface-container-high/60 rounded-lg border border-outline-variant/20 text-xs text-on-surface-variant">
+                <span class="material-symbols-outlined text-primary text-base">account_circle</span>
+                <span class="truncate">Sending as <strong class="text-on-surface">{{ current_user.username }}</strong> &lt;{{ current_user.email }}&gt;</span>
+            </div>
+
+            <!-- In-place Status Notification Box -->
+            <div id="contactStatusBox" class="hidden px-md py-sm rounded-lg text-xs font-body-sm flex items-center justify-between gap-sm transition-all">
+                <span id="contactStatusText"></span>
+                <button type="button" onclick="document.getElementById('contactStatusBox').classList.add('hidden')" class="text-lg leading-none hover:opacity-80">&times;</button>
+            </div>
+            
+            <form id="supportContactForm" method="POST" action="{{ url_for('support_contact') }}" class="flex flex-col gap-md">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                <!-- Category Chips -->
+                <div class="flex flex-col gap-1.5">
+                    <label class="font-label-caps text-label-caps text-on-surface-variant text-xs uppercase tracking-wider">Inquiry Type</label>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-xs" id="categoryChips">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category" value="question" checked class="peer sr-only"/>
+                            <div class="text-center py-1.5 px-2 rounded-lg border border-outline-variant/30 text-xs font-medium text-on-surface-variant peer-checked:bg-primary-container peer-checked:text-on-primary-container peer-checked:border-primary peer-checked:font-bold transition-all">
+                                ❓ Question
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category" value="bug" class="peer sr-only"/>
+                            <div class="text-center py-1.5 px-2 rounded-lg border border-outline-variant/30 text-xs font-medium text-on-surface-variant peer-checked:bg-error-container/40 peer-checked:text-error peer-checked:border-error peer-checked:font-bold transition-all">
+                                🐞 Bug Report
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category" value="feature" class="peer sr-only"/>
+                            <div class="text-center py-1.5 px-2 rounded-lg border border-outline-variant/30 text-xs font-medium text-on-surface-variant peer-checked:bg-secondary-container/40 peer-checked:text-secondary peer-checked:border-secondary peer-checked:font-bold transition-all">
+                                💡 Feature
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category" value="feedback" class="peer sr-only"/>
+                            <div class="text-center py-1.5 px-2 rounded-lg border border-outline-variant/30 text-xs font-medium text-on-surface-variant peer-checked:bg-tertiary-container/40 peer-checked:text-tertiary peer-checked:border-tertiary peer-checked:font-bold transition-all">
+                                💬 Feedback
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Subject -->
+                <div class="flex flex-col gap-1">
+                    <label for="contactSubject" class="font-label-caps text-label-caps text-on-surface-variant text-xs uppercase tracking-wider">Subject</label>
+                    <input id="contactSubject" required type="text" name="subject" class="w-full bg-surface-container-high border border-outline-variant/30 rounded-lg text-on-surface font-body-sm text-body-sm px-sm py-2 focus:outline-none focus:border-primary focus:bg-surface-container-highest transition-all input-glow" placeholder="Brief summary of your inquiry..."/>
+                </div>
+
+                <!-- Message -->
+                <div class="flex flex-col gap-1">
+                    <label for="contactMessage" class="font-label-caps text-label-caps text-on-surface-variant text-xs uppercase tracking-wider">Message Details</label>
+                    <textarea id="contactMessage" required rows="4" name="message" class="w-full bg-surface-container-high border border-outline-variant/30 rounded-lg text-on-surface font-body-sm text-body-sm px-sm py-2 focus:outline-none focus:border-primary focus:bg-surface-container-highest transition-all input-glow resize-none" placeholder="Provide detailed steps, logs, or your question..."></textarea>
+                </div>
+
+                <!-- Submit Button -->
+                <button id="contactSubmitBtn" type="submit" class="mt-xs py-sm rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary-fixed transition-all flex justify-center items-center gap-xs shadow-[0_0_15px_rgba(173,198,255,0.2)] disabled:opacity-50">
+                    <span id="contactBtnIcon" class="material-symbols-outlined text-sm">send</span>
+                    <span id="contactBtnText">Send Message to Developer</span>
                 </button>
             </form>
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('supportContactForm');
+    if (!form) return;
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const btn = document.getElementById('contactSubmitBtn');
+        const icon = document.getElementById('contactBtnIcon');
+        const text = document.getElementById('contactBtnText');
+        const statusBox = document.getElementById('contactStatusBox');
+        const statusText = document.getElementById('contactStatusText');
+
+        const formData = new FormData(form);
+
+        // UI Loading state
+        btn.disabled = true;
+        icon.textContent = 'hourglass_empty';
+        icon.classList.add('animate-spin');
+        text.textContent = 'Delivering via SendByte...';
+        statusBox.className = 'hidden';
+
+        try {
+            const resp = await fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            const data = await resp.json().catch(() => ({}));
+
+            if (resp.ok && data.status === 'success') {
+                statusBox.className = 'px-md py-sm rounded-lg text-xs font-body-sm flex items-center justify-between gap-sm border bg-emerald-500/10 border-emerald-500/40 text-emerald-300';
+                statusText.innerHTML = `<strong>Success!</strong> ${data.message || 'Your message was delivered to the developer.'}`;
+                form.reset();
+            } else {
+                const errMsg = data.detail || 'Failed to send message. Please try again.';
+                statusBox.className = 'px-md py-sm rounded-lg text-xs font-body-sm flex items-center justify-between gap-sm border bg-error-container/20 border-error/50 text-error';
+                statusText.innerHTML = `<strong>Error:</strong> ${errMsg}`;
+            }
+        } catch (err) {
+            statusBox.className = 'px-md py-sm rounded-lg text-xs font-body-sm flex items-center justify-between gap-sm border bg-error-container/20 border-error/50 text-error';
+            statusText.innerHTML = `<strong>Network Error:</strong> Could not reach the server. Please check your connection.`;
+        } finally {
+            btn.disabled = false;
+            icon.textContent = 'send';
+            icon.classList.remove('animate-spin');
+            text.textContent = 'Send Message to Developer';
+        }
+    });
+});
+</script>
 {% endblock %}

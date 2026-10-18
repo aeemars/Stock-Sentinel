@@ -125,3 +125,200 @@ def test_live_prices_unauthenticated():
     assert resp.status_code == 303
     assert "/login" in resp.headers.get("location", "")
 
+def test_support_page_loads():
+    # Unauthenticated should redirect
+    resp_unauth = client.get("/support")
+    assert resp_unauth.status_code == 303
+    assert "/login" in resp_unauth.headers.get("location", "")
+
+    # Authenticated user should load support page
+    from app.services.cache import set_cached_user
+    mock_user = User({"id": 777, "username": "alex", "email": "alex@example.com"})
+    set_cached_user(mock_user.id, mock_user)
+    session_cookie = dump_session({"user_id": 777, "_csrf_token": "token777"})
+
+    client.cookies.set("session", session_cookie)
+    resp = client.get("/support")
+    assert resp.status_code == 200
+    assert "Contact the Developer" in resp.text
+    assert "https://github.com/aeemars/Stock-Sentinel" in resp.text
+    assert "Direct Inbox" in resp.text
+    client.cookies.clear()
+
+def test_support_contact_endpoint():
+    from app.services.cache import set_cached_user
+    mock_user = User({"id": 888, "username": "sarah", "email": "sarah@example.com"})
+    set_cached_user(mock_user.id, mock_user)
+    session_token = dump_session({"user_id": 888, "_csrf_token": "csrf_sarah"})
+
+    # 1. Validation error: missing subject
+    client.cookies.set("session", session_token)
+    resp_missing_sub = client.post(
+        "/support/contact",
+        data={"csrf_token": "csrf_sarah", "subject": "", "message": "Hello test message"},
+        headers={"accept": "application/json"},
+    )
+    assert resp_missing_sub.status_code == 422
+    assert resp_missing_sub.json()["status"] == "error"
+
+    # 2. Validation error: missing message
+    resp_missing_msg = client.post(
+        "/support/contact",
+        data={"csrf_token": "csrf_sarah", "subject": "Valid subject", "message": ""},
+        headers={"accept": "application/json"},
+    )
+    assert resp_missing_msg.status_code == 422
+
+    # 3. Successful AJAX submission
+    resp_success = client.post(
+        "/support/contact",
+        data={
+            "csrf_token": "csrf_sarah",
+            "category": "bug",
+            "subject": "Chart rendering latency issue",
+            "message": "When switching tickers quickly, chart takes 2 seconds to reload.",
+        },
+        headers={"accept": "application/json"},
+    )
+    assert resp_success.status_code == 200
+    data = resp_success.json()
+    assert data["status"] == "success"
+    assert "sent to the developer" in data["message"]
+
+    client.cookies.clear()
+
+def test_sendbyte_email_service_and_signature(monkeypatch):
+    import time
+    import hmac
+    import hashlib
+    from app.config import settings
+    from app.services.email import (
+        build_support_email_html,
+        send_support_email,
+        verify_sendbyte_webhook_signature,
+        handle_inbound_email_event,
+    )
+
+    # Email HTML builder
+    email_html = build_support_email_html(
+        username="testdev",
+        user_email="testdev@example.com",
+        category="bug",
+        subject="Test Bug Subject",
+        message="Steps to reproduce: ...",
+        timestamp_str="2026-10-18 12:00:00",
+    )
+    assert "testdev" in email_html
+    assert "testdev@example.com" in email_html
+    assert "Test Bug Subject" in email_html
+    assert "Bug" in email_html
+
+    # Mock dispatch (no API key or SMTP set)
+    monkeypatch.setattr(settings, "SENDBYTE_API_KEY", None)
+    monkeypatch.setattr(settings, "SMTP_USER", None)
+    monkeypatch.setattr(settings, "SMTP_PASSWORD", None)
+    result = send_support_email(
+        username="testdev",
+        user_email="testdev@example.com",
+        category="question",
+        subject="How does ROMA work?",
+        message="Tell me more about ROMA multi-agent system",
+    )
+    assert result["status"] == "success"
+    assert result.get("simulated") is True
+
+    # Webhook signature verification
+    secret = "whsec_test_secret_key_123"
+    raw_body = b'{"type":"email.received","data":{"id":"msg_123"}}'
+    now_ts = int(time.time())
+    sig_payload = f"{now_ts}.".encode("utf-8") + raw_body
+    valid_hmac = hmac.new(secret.encode("utf-8"), sig_payload, hashlib.sha256).hexdigest()
+    header_val = f"t={now_ts},v1={valid_hmac}"
+
+    # Valid signature
+    assert verify_sendbyte_webhook_signature(secret, header_val, raw_body) is True
+
+    # Tampered body
+    assert verify_sendbyte_webhook_signature(secret, header_val, b'{"type":"tampered"}') is False
+
+    # Wrong secret
+    assert verify_sendbyte_webhook_signature("wrong_secret", header_val, raw_body) is False
+
+    # Expired timestamp (older than tolerance)
+    old_ts = now_ts - 500
+    old_sig = hmac.new(secret.encode("utf-8"), f"{old_ts}.".encode("utf-8") + raw_body, hashlib.sha256).hexdigest()
+    assert verify_sendbyte_webhook_signature(secret, f"t={old_ts},v1={old_sig}", raw_body, tolerance_seconds=300) is False
+
+    # Inbound email event handler
+    inbound_event = {
+        "type": "email.received",
+        "data": {
+            "from": "user@example.com",
+            "to": ["support@inbound.stocksentinel.com"],
+            "subject": "Need help with portfolio",
+            "stripped_text": "How do I add a new stock?",
+            "spam": "pass",
+            "virus": "pass",
+        }
+    }
+    handled = handle_inbound_email_event(inbound_event)
+    assert handled["status"] == "processed"
+    assert handled["from"] == "user@example.com"
+
+def test_sendbyte_inbound_webhook_route():
+    import json
+    payload = {
+        "type": "email.received",
+        "data": {
+            "from": "trader@example.com",
+            "to": ["support@inbound.stocksentinel.com"],
+            "subject": "Webhook inquiry",
+            "stripped_text": "Inbound webhook test body",
+            "spam": "pass",
+            "virus": "pass",
+        }
+    }
+    resp = client.post(
+        "/api/webhooks/sendbyte",
+        content=json.dumps(payload),
+        headers={"Content-Type": "application/json", "webhook-id": "del_123456"}
+    )
+    assert resp.status_code == 200
+    res_data = resp.json()
+    assert res_data["status"] == "ok"
+    assert res_data["delivery_id"] == "del_123456"
+
+def test_smtp_email_dispatch(monkeypatch):
+    from unittest.mock import MagicMock
+    from app.config import settings
+    from app.services.email import send_support_email
+
+    # Mock SMTP settings
+    monkeypatch.setattr(settings, "SMTP_USER", "tester@gmail.com")
+    monkeypatch.setattr(settings, "SMTP_PASSWORD", "app_pass_1234")
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setattr(settings, "SMTP_PORT", 587)
+    monkeypatch.setattr(settings, "DEV_NOTIFICATION_EMAIL", "dev@example.com")
+
+    # Mock smtplib.SMTP
+    mock_smtp_instance = MagicMock()
+    mock_smtp_class = MagicMock(return_value=mock_smtp_instance)
+    mock_smtp_instance.__enter__.return_value = mock_smtp_instance
+
+    import smtplib
+    monkeypatch.setattr(smtplib, "SMTP", mock_smtp_class)
+
+    result = send_support_email(
+        username="john_doe",
+        user_email="john@example.com",
+        category="bug",
+        subject="Login button misaligned",
+        message="On mobile, the login button overlaps with the footer.",
+    )
+
+    assert result["status"] == "success"
+    assert result["provider"] == "smtp"
+    mock_smtp_instance.starttls.assert_called_once()
+    mock_smtp_instance.login.assert_called_once_with("tester@gmail.com", "app_pass_1234")
+    mock_smtp_instance.send_message.assert_called_once()
+
