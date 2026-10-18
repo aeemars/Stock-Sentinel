@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 import html
 import logging
 import smtplib
@@ -9,12 +7,9 @@ from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Dict, Any, Optional
-import httpx
 from app.config import settings
 
 logger = logging.getLogger(__name__)
-
-SENDBYTE_API_URL = "https://api.sendbyte.africa/v1/emails"
 
 def build_support_email_html(
     username: str,
@@ -163,7 +158,7 @@ def send_support_email(
     subject: str,
     message: str,
 ) -> Dict[str, Any]:
-    """Send user support request to developer via configured SMTP or SendByte."""
+    """Send user support request to developer via configured SMTP."""
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     html_content = build_support_email_html(
         username=username,
@@ -175,9 +170,9 @@ def send_support_email(
     )
 
     formatted_subject = f"Stock Sentinel Support - {subject}"
-    to_email = settings.DEV_NOTIFICATION_EMAIL or settings.SMTP_USER or settings.SENDBYTE_FROM_EMAIL
+    to_email = settings.DEV_NOTIFICATION_EMAIL or settings.SMTP_USER
 
-    # Option 1: Standard SMTP (Gmail App Password)
+    # Standard SMTP (Gmail App Password)
     if settings.SMTP_USER and settings.SMTP_PASSWORD:
         return send_via_smtp(
             to_email=to_email,
@@ -186,38 +181,9 @@ def send_support_email(
             html_content=html_content,
         )
 
-    # Option 2: SendByte API
-    api_key = settings.SENDBYTE_API_KEY
-    if api_key:
-        payload = {
-            "from": settings.SENDBYTE_FROM_EMAIL,
-            "to": to_email,
-            "reply_to": user_email,
-            "subject": formatted_subject,
-            "html": html_content,
-        }
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                resp = client.post(SENDBYTE_API_URL, json=payload, headers=headers)
-                if resp.status_code in (200, 201, 202):
-                    data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                    logger.info(f"SendByte support email delivered successfully. Response: {data}")
-                    return {"status": "success", "provider": "sendbyte", "data": data}
-                else:
-                    logger.error(f"SendByte API error {resp.status_code}: {resp.text}")
-                    return {"status": "error", "provider": "sendbyte", "code": resp.status_code, "detail": resp.text}
-        except Exception as exc:
-            logger.error(f"Failed to deliver support email via SendByte: {exc}")
-            return {"status": "error", "provider": "sendbyte", "detail": str(exc)}
-
     # Fallback: Local simulation mock
     logger.warning(
-        f"[Email Mock] Neither SMTP nor SENDBYTE_API_KEY is configured. "
+        f"[Email Mock] SMTP credentials (SMTP_USER/SMTP_PASSWORD) are not configured. "
         f"Logged support email from {username} <{user_email}>: [{category}] {subject}"
     )
     return {
@@ -225,76 +191,3 @@ def send_support_email(
         "simulated": True,
         "message": "Message logged locally (no email credentials configured)",
     }
-
-
-def verify_sendbyte_webhook_signature(
-    secret: str,
-    signature_header: Optional[str],
-    raw_body: bytes,
-    tolerance_seconds: int = 300,
-) -> bool:
-    """Verify incoming SendByte webhook signature.
-    
-    Header format: t=<unix_seconds>,v1=<hex_hmac_sha256>
-    HMAC is calculated over: f"{t}.".encode('utf-8') + raw_body
-    """
-    if not secret or not signature_header:
-        return False
-
-    try:
-        parts = dict(part.split("=", 1) for part in signature_header.split(",") if "=" in part)
-        timestamp_str = parts.get("t")
-        received_signature = parts.get("v1")
-
-        if not timestamp_str or not received_signature:
-            return False
-
-        timestamp = int(timestamp_str)
-        now = int(time.time())
-        if abs(now - timestamp) > tolerance_seconds:
-            logger.warning(f"SendByte webhook signature timestamp expired: {timestamp} vs current {now}")
-            return False
-
-        signed_payload = f"{timestamp}.".encode("utf-8") + raw_body
-        expected_signature = hmac.new(
-            secret.encode("utf-8"),
-            signed_payload,
-            hashlib.sha256,
-        ).hexdigest()
-
-        return hmac.compare_digest(received_signature, expected_signature)
-    except Exception as exc:
-        logger.error(f"Error validating SendByte webhook signature: {exc}")
-        return False
-
-
-def handle_inbound_email_event(event_payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Process an 'email.received' event from SendByte inbound webhook.
-    
-    Extracts sender, recipient, subject, stripped body, and spam/virus status.
-    """
-    event_type = event_payload.get("type")
-    data = event_payload.get("data", {})
-
-    if event_type == "email.received":
-        sender = data.get("from")
-        recipients = data.get("recipients") or data.get("to")
-        subject = data.get("subject")
-        stripped_text = data.get("stripped_text") or data.get("text")
-        spam_status = data.get("spam", "unknown")
-        virus_status = data.get("virus", "unknown")
-
-        logger.info(
-            f"[SendByte Inbound Email] From: {sender} | To: {recipients} | "
-            f"Subject: '{subject}' | Spam: {spam_status} | Virus: {virus_status}"
-        )
-        return {
-            "status": "processed",
-            "type": "email.received",
-            "from": sender,
-            "subject": subject,
-            "spam": spam_status,
-        }
-
-    logger.info(f"[SendByte Webhook] Received event: {event_type}")
-    return {"status": "acknowledged", "type": event_type}

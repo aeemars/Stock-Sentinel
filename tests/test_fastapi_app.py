@@ -140,7 +140,7 @@ def test_support_page_loads():
     client.cookies.set("session", session_cookie)
     resp = client.get("/support")
     assert resp.status_code == 200
-    assert "Contact the Developer" in resp.text
+    assert "Contact Support" in resp.text
     assert "https://github.com/aeemars/Stock-Sentinel" in resp.text
     assert "Direct Inbox" in resp.text
     client.cookies.clear()
@@ -187,16 +187,11 @@ def test_support_contact_endpoint():
 
     client.cookies.clear()
 
-def test_sendbyte_email_service_and_signature(monkeypatch):
-    import time
-    import hmac
-    import hashlib
+def test_email_simulation_fallback(monkeypatch):
     from app.config import settings
     from app.services.email import (
         build_support_email_html,
         send_support_email,
-        verify_sendbyte_webhook_signature,
-        handle_inbound_email_event,
     )
 
     # Email HTML builder
@@ -213,8 +208,7 @@ def test_sendbyte_email_service_and_signature(monkeypatch):
     assert "Test Bug Subject" in email_html
     assert "Bug" in email_html
 
-    # Mock dispatch (no API key or SMTP set)
-    monkeypatch.setattr(settings, "SENDBYTE_API_KEY", None)
+    # Mock dispatch (no SMTP set)
     monkeypatch.setattr(settings, "SMTP_USER", None)
     monkeypatch.setattr(settings, "SMTP_PASSWORD", None)
     result = send_support_email(
@@ -227,66 +221,6 @@ def test_sendbyte_email_service_and_signature(monkeypatch):
     assert result["status"] == "success"
     assert result.get("simulated") is True
 
-    # Webhook signature verification
-    secret = "whsec_test_secret_key_123"
-    raw_body = b'{"type":"email.received","data":{"id":"msg_123"}}'
-    now_ts = int(time.time())
-    sig_payload = f"{now_ts}.".encode("utf-8") + raw_body
-    valid_hmac = hmac.new(secret.encode("utf-8"), sig_payload, hashlib.sha256).hexdigest()
-    header_val = f"t={now_ts},v1={valid_hmac}"
-
-    # Valid signature
-    assert verify_sendbyte_webhook_signature(secret, header_val, raw_body) is True
-
-    # Tampered body
-    assert verify_sendbyte_webhook_signature(secret, header_val, b'{"type":"tampered"}') is False
-
-    # Wrong secret
-    assert verify_sendbyte_webhook_signature("wrong_secret", header_val, raw_body) is False
-
-    # Expired timestamp (older than tolerance)
-    old_ts = now_ts - 500
-    old_sig = hmac.new(secret.encode("utf-8"), f"{old_ts}.".encode("utf-8") + raw_body, hashlib.sha256).hexdigest()
-    assert verify_sendbyte_webhook_signature(secret, f"t={old_ts},v1={old_sig}", raw_body, tolerance_seconds=300) is False
-
-    # Inbound email event handler
-    inbound_event = {
-        "type": "email.received",
-        "data": {
-            "from": "user@example.com",
-            "to": ["support@inbound.stocksentinel.com"],
-            "subject": "Need help with portfolio",
-            "stripped_text": "How do I add a new stock?",
-            "spam": "pass",
-            "virus": "pass",
-        }
-    }
-    handled = handle_inbound_email_event(inbound_event)
-    assert handled["status"] == "processed"
-    assert handled["from"] == "user@example.com"
-
-def test_sendbyte_inbound_webhook_route():
-    import json
-    payload = {
-        "type": "email.received",
-        "data": {
-            "from": "trader@example.com",
-            "to": ["support@inbound.stocksentinel.com"],
-            "subject": "Webhook inquiry",
-            "stripped_text": "Inbound webhook test body",
-            "spam": "pass",
-            "virus": "pass",
-        }
-    }
-    resp = client.post(
-        "/api/webhooks/sendbyte",
-        content=json.dumps(payload),
-        headers={"Content-Type": "application/json", "webhook-id": "del_123456"}
-    )
-    assert resp.status_code == 200
-    res_data = resp.json()
-    assert res_data["status"] == "ok"
-    assert res_data["delivery_id"] == "del_123456"
 
 def test_smtp_email_dispatch(monkeypatch):
     from unittest.mock import MagicMock

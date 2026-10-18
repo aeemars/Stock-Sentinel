@@ -6,7 +6,7 @@
 <header class="mb-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-md">
     <div>
         <div class="flex items-center gap-sm mb-xs">
-            <span class="material-symbols-outlined text-primary text-3xl" style="font-variation-settings: 'FILL' 1;">Horse</span>
+            <img src="{{ url_for('static', filename='favicon.svg') }}" alt="Stock Sentinel" class="w-10 h-10 md:w-12 md:h-12 rounded-xl shadow-sm object-contain flex-shrink-0"/>
             <h2 class="font-display-lg text-display-lg text-on-surface">Your Portfolios</h2>
         </div>
         <p class="font-body-lg text-body-lg text-on-surface-variant">Manage your asset collections and track aggregate performance.</p>
@@ -66,7 +66,7 @@
                 <div class="glass-card rounded-xl p-lg flex flex-col gap-sm hover:glow-active transition-all group relative overflow-hidden">
                     <!-- Subtle background decoration -->
                     <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <span class="material-symbols-outlined text-8xl" style="font-variation-settings: 'FILL' 1;">Horse</span>
+                        <span class="material-symbols-outlined text-8xl" style="font-variation-settings: 'FILL' 1;">wallet</span>
                     </div>
 
                     <div class="flex justify-between items-start relative z-10">

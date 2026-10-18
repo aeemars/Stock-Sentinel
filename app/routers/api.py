@@ -1,6 +1,6 @@
 import secrets
 from typing import Optional
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import APIRouter, Header, HTTPException, status
 from app.config import settings
 from roma.workflow import run_root_workflow
 
@@ -29,38 +29,4 @@ def run_workflow_api(authorization: Optional[str] = Header(None)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
-        )
-
-
-@router.post("/webhooks/sendbyte", name="sendbyte_webhook")
-async def sendbyte_webhook(
-    request: Request,
-    sendbyte_signature: Optional[str] = Header(None, alias="sendbyte-signature"),
-    webhook_id: Optional[str] = Header(None, alias="webhook-id"),
-):
-    """
-    Inbound webhook endpoint for SendByte email events (including 'email.received').
-    Validates HMAC-SHA256 signature against raw request body if SENDBYTE_WEBHOOK_SECRET is set.
-    """
-    raw_body = await request.body()
-    secret = settings.SENDBYTE_WEBHOOK_SECRET
-
-    if secret:
-        from app.services.email import verify_sendbyte_webhook_signature
-        if not verify_sendbyte_webhook_signature(secret, sendbyte_signature, raw_body):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or missing webhook signature"
-            )
-
-    try:
-        import json
-        from app.services.email import handle_inbound_email_event
-        payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
-        result = handle_inbound_email_event(payload)
-        return {"status": "ok", "delivery_id": webhook_id, "result": result}
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Malformed webhook payload: {exc}"
         )

@@ -170,7 +170,7 @@
         </div>
         <div class="flex-1 flex flex-col gap-xs">
             <a href="{{ url_for('dashboard') }}" class="flex items-center gap-sm p-sm rounded-lg font-body-sm text-body-sm group {% if request.endpoint in ['dashboard', 'view_portfolio'] %}bg-primary-container text-on-primary-container font-bold translate-x-1 duration-200 glow-active{% else %}text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors{% endif %}">
-                <span class="material-symbols-outlined {% if request.endpoint not in ['dashboard', 'view_portfolio'] %}group-hover:text-primary transition-colors{% endif %}" {% if request.endpoint in ['dashboard', 'view_portfolio'] %}style="font-variation-settings: 'FILL' 1;"{% endif %}>Horse</span>
+                <span class="material-symbols-outlined {% if request.endpoint not in ['dashboard', 'view_portfolio'] %}group-hover:text-primary transition-colors{% endif %}" {% if request.endpoint in ['dashboard', 'view_portfolio'] %}style="font-variation-settings: 'FILL' 1;"{% endif %}>wallet</span>
                 Portfolios
             </a>
             <a href="{{ url_for('alerts') }}" class="flex items-center gap-sm p-sm rounded-lg font-body-sm text-body-sm group {% if request.endpoint == 'alerts' %}bg-primary-container text-on-primary-container font-bold translate-x-1 duration-200 glow-active{% else %}text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors{% endif %}">
@@ -245,7 +245,7 @@
 
         <div class="flex flex-col gap-xs flex-1">
             <a href="{{ url_for('dashboard') }}" class="flex items-center gap-sm p-sm rounded-lg font-body-sm text-body-sm {% if request.endpoint in ['dashboard', 'view_portfolio'] %}bg-primary-container text-on-primary-container font-bold{% else %}text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high{% endif %} transition-colors">
-                <span class="material-symbols-outlined" {% if request.endpoint in ['dashboard', 'view_portfolio'] %}style="font-variation-settings: 'FILL' 1;"{% endif %}>Horse</span> Portfolios
+                <span class="material-symbols-outlined" {% if request.endpoint in ['dashboard', 'view_portfolio'] %}style="font-variation-settings: 'FILL' 1;"{% endif %}>wallet</span> Portfolios
             </a>
             <a href="{{ url_for('alerts') }}" class="flex items-center gap-sm p-sm rounded-lg font-body-sm text-body-sm {% if request.endpoint == 'alerts' %}bg-primary-container text-on-primary-container font-bold{% else %}text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high{% endif %} transition-colors">
                 <span class="material-symbols-outlined" {% if request.endpoint == 'alerts' %}style="font-variation-settings: 'FILL' 1;"{% endif %}>notifications_active</span> Alerts
@@ -271,7 +271,7 @@
     <nav class="lg:hidden fixed bottom-0 left-0 w-full z-40 bg-surface/95 backdrop-blur-xl border-t border-outline-variant/20">
         <div class="flex justify-around items-center h-14 px-xs max-w-lg mx-auto">
             <a href="{{ url_for('dashboard') }}" class="flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-colors {% if request.endpoint in ['dashboard', 'view_portfolio'] %}text-primary{% else %}text-on-surface-variant{% endif %}">
-                <span class="material-symbols-outlined text-xl" {% if request.endpoint in ['dashboard', 'view_portfolio'] %}style="font-variation-settings: 'FILL' 1;"{% endif %}>Horse</span>
+                <span class="material-symbols-outlined text-xl" {% if request.endpoint in ['dashboard', 'view_portfolio'] %}style="font-variation-settings: 'FILL' 1;"{% endif %}>wallet</span>
                 <span class="text-[10px] font-semibold leading-none">Portfolios</span>
             </a>
             <a href="{{ url_for('alerts') }}" class="flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-colors {% if request.endpoint == 'alerts' %}text-primary{% else %}text-on-surface-variant{% endif %}">
