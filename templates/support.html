@@ -22,7 +22,7 @@
         <div class="flex flex-col gap-md">
             <div class="flex flex-col gap-1">
                 <h4 class="font-body-lg text-primary font-semibold">How do the AI alerts work?</h4>
-                <p class="font-body-sm text-on-surface-variant leading-relaxed">Alerts are generated daily at market close. Our ROMA multi-agent framework fetches price data, scans Farcaster sentiment via Neynar, runs forecasting, and synthesizes it into actionable alerts.</p>
+                <p class="font-body-sm text-on-surface-variant leading-relaxed">Alerts are generated daily at market close and can be triggered on-demand. Our OpenRouter AI intelligence engine analyzes holding metrics, market momentum, and entry prices to generate structured, actionable recommendations.</p>
             </div>
             
             <div class="flex flex-col gap-1 border-t border-outline-variant/10 pt-md">
@@ -31,8 +31,8 @@
             </div>
             
             <div class="flex flex-col gap-1 border-t border-outline-variant/10 pt-md">
-                <h4 class="font-body-lg text-primary font-semibold">Why am I not seeing new sentiment data?</h4>
-                <p class="font-body-sm text-on-surface-variant leading-relaxed">Make sure you have correctly set up your `NEYNAR_API_KEY` in the `.env` file of your application. The Farcaster search requires a valid API key.</p>
+                <h4 class="font-body-lg text-primary font-semibold">How do I trigger an AI analysis scan?</h4>
+                <p class="font-body-sm text-on-surface-variant leading-relaxed">You can click "Run AI Analysis" directly inside any portfolio or use the "Run AI Scan Now" button in the Alerts feed to evaluate your holdings at any time.</p>
             </div>
         </div>
     </div>
@@ -53,25 +53,25 @@
                             <h3 class="font-headline-md text-headline-md text-lg text-on-surface">aeemars/Stock-Sentinel</h3>
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-data-mono">Public</span>
                         </div>
-                        <p class="font-body-sm text-on-surface-variant text-xs">Autonomous AI stock monitoring, sentiment, &amp; forecasting pipeline</p>
+                        <p class="font-body-sm text-on-surface-variant text-xs">Autonomous AI stock monitoring &amp; quantitative intelligence pipeline</p>
                     </div>
                 </div>
             </div>
 
             <p class="font-body-sm text-on-surface-variant leading-relaxed">
-                Explore the full architecture, ROMA multi-agent documentation, database schema definitions, and production deployment guides directly on GitHub.
+                Explore the full architecture, OpenRouter AI intelligence documentation, database schema definitions, and production deployment guides directly on GitHub.
             </p>
 
             <!-- Topic Chips -->
             <div class="flex flex-wrap gap-xs">
                 <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-high/60 border border-outline-variant/30 text-xs text-on-surface font-medium">
-                    <span class="material-symbols-outlined text-xs text-primary">smart_toy</span> ROMA AI Framework
+                    <span class="material-symbols-outlined text-xs text-primary">smart_toy</span> OpenRouter AI Engine
                 </span>
                 <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-high/60 border border-outline-variant/30 text-xs text-on-surface font-medium">
                     <span class="material-symbols-outlined text-xs text-emerald-400">bolt</span> Sub-60ms Engine
                 </span>
                 <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-high/60 border border-outline-variant/30 text-xs text-on-surface font-medium">
-                    <span class="material-symbols-outlined text-xs text-tertiary">analytics</span> Neynar Sentiment
+                    <span class="material-symbols-outlined text-xs text-tertiary">analytics</span> Portfolio Diagnostics
                 </span>
                 <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-high/60 border border-outline-variant/30 text-xs text-on-surface font-medium">
                     <span class="material-symbols-outlined text-xs text-secondary">menu_book</span> API Reference

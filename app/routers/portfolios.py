@@ -123,6 +123,15 @@ def view_portfolio(
         row = cur.fetchone()
         recent_alerts = row['count'] if row else 0
 
+        cur.execute("""
+            SELECT id, message, created_at
+            FROM alerts
+            WHERE portfolio_id = %s
+            ORDER BY created_at DESC
+            LIMIT 5
+        """, (portfolio_id,))
+        portfolio_alerts = cur.fetchall()
+
     # Non-blocking detached background sync: runs in daemon thread without blocking HTTP response (<20ms)
     if needs_price_sync and holdings:
         dispatch_background_sync(background_sync_portfolio_prices, portfolio_id, 60)
@@ -133,6 +142,7 @@ def view_portfolio(
         "total_shares": total_shares,
         "unique_tickers": unique_tickers,
         "recent_alerts": recent_alerts,
+        "portfolio_alerts": portfolio_alerts,
         "total_cost": total_cost,
         "total_market_value": total_market_value,
         "total_pnl": total_pnl,
@@ -318,4 +328,38 @@ def get_portfolio_live_prices(
     # Cache response for 10 seconds to serve rapid consecutive polls in <1ms
     cache.set(cache_key, payload, ttl=10)
     return payload
+
+
+@router.post("/portfolio/{portfolio_id}/analyze-ai", name="analyze_portfolio_ai", dependencies=[Depends(verify_csrf)], response_model=None)
+def analyze_portfolio_ai(
+    portfolio_id: int,
+    request: Request,
+    current_user=Depends(get_current_user),
+    conn=Depends(get_db)
+):
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT id, name FROM portfolios WHERE id = %s AND user_id = %s", (portfolio_id, current_user.id))
+        portfolio = cur.fetchone()
+        if not portfolio:
+            flash(request, "Portfolio not found", "error")
+            return RedirectResponse(url=str(request.url_for("dashboard")), status_code=303)
+
+        cur.execute("SELECT COUNT(*) as count FROM holdings WHERE portfolio_id = %s", (portfolio_id,))
+        cnt = cur.fetchone()['count']
+        if cnt == 0:
+            flash(request, "Cannot analyze an empty portfolio. Add holdings first.", "warning")
+            return RedirectResponse(url=f"/portfolio/{portfolio_id}", status_code=303)
+
+    # Invalidate cached views
+    cache.delete(f"data:portfolio_view:{current_user.id}:{portfolio_id}")
+    cache.delete(f"data:user:{current_user.id}:dashboard")
+
+    try:
+        from roma.workflow import run_root_workflow
+        run_root_workflow(portfolio_id=portfolio_id)
+        flash(request, f"AI analysis completed for {portfolio['name']}! Diagnostic alerts updated.", "success")
+    except Exception as e:
+        flash(request, f"AI analysis error: {e}", "error")
+
+    return RedirectResponse(url=f"/portfolio/{portfolio_id}", status_code=303)
 

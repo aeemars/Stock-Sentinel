@@ -46,7 +46,21 @@ def dashboard(
             p['holdings'] = [None] * cnt  # Preserves template {{ portfolio.holdings|length }}
             total_holdings += cnt
 
-    payload = {"portfolios": portfolios, "total_holdings": total_holdings}
+        cur.execute("""
+            SELECT a.id, a.portfolio_id, a.message, a.created_at, p.name as portfolio_name
+            FROM alerts a
+            JOIN portfolios p ON a.portfolio_id = p.id
+            WHERE p.user_id = %s
+            ORDER BY a.created_at DESC
+            LIMIT 4
+        """, (current_user.id,))
+        recent_ai_alerts = cur.fetchall()
+
+    payload = {
+        "portfolios": portfolios,
+        "total_holdings": total_holdings,
+        "recent_ai_alerts": recent_ai_alerts,
+    }
     cache.set(cache_key, payload, ttl=30.0)
 
     return render_template("dashboard.html", request, payload)

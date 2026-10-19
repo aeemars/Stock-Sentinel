@@ -5,14 +5,14 @@ AI-powered stock monitoring dashboard. Track portfolios, get sentiment analysis 
 ## What It Does
 
 - **Portfolio tracking** — Create portfolios, add stock holdings, and see live prices from Yahoo Finance
-- **AI analysis** — Four-agent pipeline (ROMA) fetches prices, scores social sentiment, forecasts trends, and synthesises alerts
-- **Automated alerts** — Runs daily at market close; results land on your Alerts page
+- **OpenRouter AI Intelligence** — Leverages state-of-the-art free-tier LLMs (Meta Llama 3.3 70B, Google Gemini 2.0 Flash Lite) to produce structured financial evaluations (BULLISH, BEARISH, TAKE PROFIT, RISK ALERT)
+- **On-demand & Automated Scans** — Run instant diagnostic evaluations directly from portfolios/alerts or let the daily market close cron run automatically
 - **Analytics** — Real-time charts showing portfolio distribution, holdings breakdown, and alert trends
 
 ## Tech Stack
 
 - **Backend:** Python, FastAPI, Uvicorn, PostgreSQL
-- **Data & AI:** yfinance, Prophet, VADER Sentiment, Pandas, HTTPX
+- **Data & AI:** yfinance, OpenRouter AI (OpenAI-compatible HTTP client), Pandas, HTTPX
 - **Frontend:** HTML/Jinja2, Tailwind CSS, Material Symbols
 - **Auth & Ops:** ItsDangerous (Signed Session Cookies), bcrypt, APScheduler
 
@@ -32,7 +32,7 @@ docker run --name stocks-postgres \
 
 # 3. Configure
 cp .env.example .env
-# Set NEON_DATABASE_URL, SECRET_KEY, and optionally NEYNAR_API_KEY
+# Set NEON_DATABASE_URL, SECRET_KEY, and optionally OPENROUTER_API_KEY
 
 # 4. Run
 uvicorn main:app --reload --port 5000
@@ -41,15 +41,15 @@ uvicorn main:app --reload --port 5000
 
 Open `http://localhost:5000/register` to create an account.
 
-## ROMA Pipeline
+## AI Intelligence Pipeline
 
-The automated analysis runs four agents in sequence for each holding:
+The automated analysis pipeline evaluates each active holding:
 
 ```
-PriceAgent → SentimentAgent → ForecastAgent → SynthesizerAgent → Alert
+Price & Momentum Data → Financial Prompt Construction → OpenRouter Free LLM → Structured Verdict & Actionable Alert
 ```
 
-See [roma/ROMA.md](roma/ROMA.md) for details.
+If `OPENROUTER_API_KEY` is not configured, the system gracefully uses a built-in quantitative simulation engine without interrupting functionality.
 
 ## Project Structure
 
@@ -58,14 +58,16 @@ main.py             FastAPI application & ASGI lifespan
 app/
   config.py         Pydantic BaseSettings configuration
   dependencies.py   Auth & CSRF dependencies
-  session.py        Signed session cookie middleware & flash messaging
-  templates_config.py Jinja2Templates configuration & Flask-compatible globals
+  services/
+    ai.py           OpenRouter AI intelligence engine & prompt constructor
+    cache.py        Tier-1 in-memory caching
+    market.py       Market data & price synchronization
   routers/          Modular route handlers (auth, dashboard, portfolios, holdings, alerts, analytics, api)
 db.py               PostgreSQL schema + connection pool + get_db dependency
 scheduler.py        APScheduler cron job
 roma/
-  agents.py         PriceAgent, SentimentAgent (HTTPX), ForecastAgent, SynthesizerAgent
-  workflow.py       Orchestrates the agent pipeline
+  agents.py         PriceAgent (yfinance)
+  workflow.py       Orchestrates the AI analysis pipeline
 templates/          Jinja2 pages (dashboard, portfolio, alerts, analytics, etc.)
 static/             Favicon and assets
 ```
@@ -76,7 +78,8 @@ static/             Favicon and assets
 |----------|----------|-------------|
 | `NEON_DATABASE_URL` | Yes | PostgreSQL connection string |
 | `SECRET_KEY` | Yes | Session cookie secret |
-| `NEYNAR_API_KEY` | No | Farcaster sentiment (via Neynar) |
+| `OPENROUTER_API_KEY` | No | OpenRouter API key (free tier available at openrouter.ai) |
+| `OPENROUTER_MODEL` | No | AI Model (default: `meta-llama/llama-3.3-70b-instruct:free`) |
 | `CRON_SECRET` | No | Auth token for `/api/run-workflow` |
 | `MARKET_CLOSE_HOUR` | No | Scheduler hour (default: 16) |
 | `MARKET_CLOSE_MINUTE` | No | Scheduler minute (default: 30) |

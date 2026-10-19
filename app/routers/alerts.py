@@ -104,3 +104,22 @@ def dismiss_alert(
     referer = request.headers.get("referer")
     dest = referer if is_safe_redirect(request, referer) else str(request.url_for("alerts"))
     return RedirectResponse(url=dest, status_code=303)
+
+
+@router.post("/alerts/scan-ai", name="scan_alerts_ai", dependencies=[Depends(verify_csrf)], response_model=None)
+def scan_alerts_ai(
+    request: Request,
+    current_user=Depends(get_current_user),
+    conn=Depends(get_db)
+):
+    try:
+        from roma.workflow import run_root_workflow
+        from app.services.cache import cache
+
+        run_root_workflow(user_id=current_user.id)
+        cache.delete(f"data:user:{current_user.id}:dashboard")
+        flash(request, "AI analysis scan completed across all your portfolios!", "success")
+    except Exception as e:
+        flash(request, f"Failed to run AI scan: {str(e)}", "error")
+
+    return RedirectResponse(url=str(request.url_for("alerts")), status_code=303)

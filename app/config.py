@@ -8,11 +8,14 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None
     NEON_DATABASE_URL: Optional[str] = None
     SECRET_KEY: str = "dev-secret-key-change-in-production"
-    NEYNAR_API_KEY: Optional[str] = None
     CRON_SECRET: Optional[str] = None
     MARKET_CLOSE_HOUR: int = 16
     MARKET_CLOSE_MINUTE: int = 30
-    ROMA_FRAMEWORK_MODULE: Optional[str] = None
+
+    # OpenRouter AI Intelligence Engine
+    OPENROUTER_API_KEY: Optional[str] = None
+    OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     ENVIRONMENT: Optional[str] = None
     VERCEL: Optional[str] = None
 

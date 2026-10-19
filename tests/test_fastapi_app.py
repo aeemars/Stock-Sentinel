@@ -256,3 +256,84 @@ def test_smtp_email_dispatch(monkeypatch):
     mock_smtp_instance.login.assert_called_once_with("tester@gmail.com", "app_pass_1234")
     mock_smtp_instance.send_message.assert_called_once()
 
+
+def test_ai_simulation_fallback():
+    from app.services.ai import analyze_holdings, format_analysis_as_alert, _simulate_analysis
+
+    holdings_data = [
+        {"ticker": "NVDA", "shares": 10.0, "buy_price": 100.0, "last_price": 135.0, "pnl_pct": 35.0},
+        {"ticker": "AAPL", "shares": 15.0, "buy_price": 150.0, "last_price": 160.0, "pnl_pct": 6.67},
+        {"ticker": "MSFT", "shares": 8.0, "buy_price": 400.0, "last_price": 395.0, "pnl_pct": -1.25},
+        {"ticker": "TSLA", "shares": 20.0, "buy_price": 250.0, "last_price": 220.0, "pnl_pct": -12.0},
+        {"ticker": "INTC", "shares": 50.0, "buy_price": 40.0, "last_price": 22.0, "pnl_pct": -45.0},
+    ]
+
+    results = analyze_holdings(holdings_data)
+    assert len(results) == 5
+
+    res_by_ticker = {r["ticker"]: r for r in results}
+    assert res_by_ticker["NVDA"]["signal"] == "TAKE_PROFIT"
+    assert res_by_ticker["AAPL"]["signal"] == "BULLISH"
+    assert res_by_ticker["MSFT"]["signal"] == "NEUTRAL"
+    assert res_by_ticker["TSLA"]["signal"] == "BEARISH"
+    assert res_by_ticker["INTC"]["signal"] == "RISK_ALERT"
+
+    # Test format alert
+    alert_text = format_analysis_as_alert("NVDA", res_by_ticker["NVDA"])
+    assert "NVDA" in alert_text
+    assert "TAKE_PROFIT" in alert_text
+
+
+def test_ai_openrouter_mock_api(monkeypatch):
+    from unittest.mock import MagicMock
+    from app.config import settings
+    from app.services.ai import analyze_holdings
+
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "test-fake-key")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": '[{"ticker": "AAPL", "signal": "BULLISH", "risk_level": "LOW", "summary": "Strong momentum.", "reasoning": "• High earnings growth\\n• Stable cash flow"}]'
+                }
+            }
+        ]
+    }
+
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.post.return_value = mock_resp
+
+    import httpx
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    holdings_data = [{"ticker": "AAPL", "shares": 10.0, "buy_price": 150.0, "last_price": 180.0, "pnl_pct": 20.0}]
+    results = analyze_holdings(holdings_data)
+
+    assert len(results) == 1
+    assert results[0]["ticker"] == "AAPL"
+    assert results[0]["signal"] == "BULLISH"
+    assert "Strong momentum" in results[0]["summary"]
+
+
+def test_on_demand_ai_endpoints_unauth():
+    # Without CSRF token, verify_csrf redirects to dashboard/safe destination
+    resp1 = client.post("/portfolio/1/analyze-ai")
+    assert resp1.status_code == 303
+    assert "/dashboard" in resp1.headers.get("location", "")
+
+    resp2 = client.post("/alerts/scan-ai")
+    assert resp2.status_code == 303
+    assert "/dashboard" in resp2.headers.get("location", "")
+
+    # With CSRF token but without authenticated user, get_current_user redirects to /login
+    session_cookie = dump_session({"_csrf_token": "csrf123"})
+    client.cookies.set("session", session_cookie)
+    resp3 = client.post("/portfolio/1/analyze-ai", data={"csrf_token": "csrf123"})
+    assert resp3.status_code == 303
+    assert "/login" in resp3.headers.get("location", "")
+    client.cookies.clear()
+

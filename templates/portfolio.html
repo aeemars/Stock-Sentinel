@@ -91,6 +91,35 @@
                 </button>
             </form>
         </div>
+
+        <!-- AI Sentinel Diagnostic Card -->
+        <div class="glass-card rounded-xl p-lg flex flex-col gap-md border border-primary/20 relative overflow-hidden">
+            <div class="flex items-center justify-between border-b border-outline-variant/20 pb-sm">
+                <div class="flex items-center gap-xs text-primary">
+                    <span class="material-symbols-outlined text-base">psychology</span>
+                    <h3 class="font-headline-md text-headline-md text-sm">AI Sentinel Diagnostic</h3>
+                </div>
+                <span class="font-data-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">Active</span>
+            </div>
+
+            {% if portfolio_alerts %}
+                <div class="flex flex-col gap-sm max-h-[300px] overflow-y-auto pr-1">
+                    {% for alert in portfolio_alerts %}
+                        <div class="p-sm rounded-lg bg-surface-container-high/60 border border-outline-variant/30 flex flex-col gap-xs">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="font-data-mono text-on-surface-variant text-[11px]">{{ alert.created_at.strftime('%b %d, %H:%M') if alert.created_at else '' }}</span>
+                            </div>
+                            <p class="font-body-sm text-xs text-on-surface leading-relaxed whitespace-pre-wrap">{{ alert.message }}</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="flex flex-col items-center justify-center py-md text-center">
+                    <span class="material-symbols-outlined text-3xl text-outline mb-xs">smart_toy</span>
+                    <p class="font-body-sm text-xs text-on-surface-variant max-w-[200px]">No recent diagnostic alerts. Click "Run AI Analysis" above to evaluate holdings.</p>
+                </div>
+            {% endif %}
+        </div>
     </div>
 
     <!-- Holdings Table Canvas -->
@@ -129,6 +158,21 @@
                       action="/portfolio/{{ portfolio.id }}/refresh-prices"
                       class="hidden">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                </form>
+
+                <!-- Interactive Run AI Analysis Button -->
+                <form method="POST" action="/portfolio/{{ portfolio.id }}/analyze-ai" class="inline" onsubmit="document.getElementById('ai-btn-spinner').classList.add('animate-spin'); document.getElementById('ai-btn-text').textContent='Analyzing...';">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button id="btn-run-ai"
+                            type="submit"
+                            title="Run AI diagnostic on this portfolio's holdings"
+                            class="flex items-center gap-xs px-sm py-xs rounded-lg
+                                   bg-primary/10 border border-primary/30 text-primary
+                                   font-body-sm text-body-sm hover:bg-primary hover:text-on-primary
+                                   transition-all cursor-pointer shadow-sm">
+                        <span id="ai-btn-spinner" class="material-symbols-outlined text-sm">auto_awesome</span>
+                        <span id="ai-btn-text">Run AI Analysis</span>
+                    </button>
                 </form>
             </div>
         </div>

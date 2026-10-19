@@ -1,29 +1,37 @@
-# ROMA — Recursive Open Meta-Agent
+# Stock Sentinel AI Intelligence Engine
 
-ROMA is the multi-agent AI framework that powers Stock Sentinel's automated analysis pipeline. It runs as a scheduled background job at market close and produces actionable alerts for every holding across all portfolios.
+Stock Sentinel features an automated AI analysis pipeline powered by **OpenRouter** free-tier LLMs (such as Meta Llama 3.3 70B Instruct and Google Gemini 2.0 Flash Lite), replacing the legacy 4-agent ROMA pipeline.
 
-## Agent Pipeline
-
-Each holding is processed sequentially through four specialised agents:
+## Architecture
 
 ```
-PriceAgent → SentimentAgent → ForecastAgent → SynthesizerAgent → Alert
+User Holdings & Buy Prices
+         │
+         ▼
+yfinance Price Engine (Current price, 7d/30d performance, P&L %)
+         │
+         ▼
+Prompt Constructor (`app/services/ai.py`)
+         │
+         ▼
+OpenRouter API (Free LLM)
+         │  (or built-in quantitative simulation engine if no API key is provided)
+         ▼
+Structured JSON Verdict
+  • Signal: BULLISH / NEUTRAL / BEARISH / TAKE_PROFIT / ACCUMULATE / RISK_ALERT
+  • Risk Level: LOW / MEDIUM / HIGH / VOLATILE
+  • Executive Summary & Bulleted Observations
+         │
+         ▼
+Alerts Persistence (`alerts` table) & Real-Time UI Badging
 ```
 
-| Agent | Role | Source |
-|-------|------|--------|
-| **PriceAgent** | Fetches 180 days of historical closing prices | Yahoo Finance (yfinance) |
-| **SentimentAgent** | Searches social posts about the ticker and scores sentiment | Farcaster (Neynar API) + VADER |
-| **ForecastAgent** | Produces a 3-day price forecast from the historical data | Facebook Prophet |
-| **SynthesizerAgent** | Combines all outputs into a human-readable report with risk flags | Rule-based logic |
+## How It Triggers
 
-## Execution Flow
+1. **On-Demand**: Click **"Run AI Analysis"** directly from any portfolio page or **"Run AI Scan Now"** on the Alerts feed.
+2. **Automated Cron**: Triggers automatically at market close (`16:30` by default, configured via `MARKET_CLOSE_HOUR` and `MARKET_CLOSE_MINUTE`).
+3. **Webhook/API**: Triggerable via `POST /api/run-workflow` with `X-Cron-Secret`.
 
-1. The **scheduler** triggers `run_root_workflow()` at market close (configurable via `MARKET_CLOSE_HOUR` / `MARKET_CLOSE_MINUTE`).
-2. The workflow queries all holdings from the database.
-3. For each holding, the four agents run in sequence — each agent's output feeds into the next.
-4. The final synthesised report is stored as an **alert** in the database, linked to the holding's portfolio.
+## Graceful Fallback
 
-## External ROMA Support
-
-The framework supports an optional external ROMA module. If `ROMA_FRAMEWORK_MODULE` is set in `.env`, the system will attempt to import and delegate to it. If unavailable or failing, it falls back to the built-in agent pipeline described above.
+When `OPENROUTER_API_KEY` is not configured, the service seamlessly falls back to a deterministic quantitative simulation model based on entry prices, momentum, and position drawdowns, ensuring 100% offline availability and instant local testing.

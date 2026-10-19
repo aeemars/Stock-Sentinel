@@ -13,10 +13,13 @@
         <p class="font-body-lg text-body-lg text-on-surface-variant">Monitor critical market events and portfolio triggers.</p>
     </div>
     <div class="flex items-center gap-sm bg-surface-container rounded-lg p-1 border border-outline-variant/30">
-        <button class="flex items-center gap-xs px-sm py-xs bg-primary text-on-primary rounded font-body-sm text-body-sm font-medium">
-            <span class="material-symbols-outlined text-sm">play_arrow</span>
-            Auto-refresh: ON
-        </button>
+        <form method="POST" action="/alerts/scan-ai" class="inline" onsubmit="document.getElementById('alerts-ai-spinner').classList.add('animate-spin'); document.getElementById('alerts-ai-text').textContent='Scanning...';">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button id="btn-scan-alerts-ai" type="submit" class="flex items-center gap-xs px-sm py-xs bg-primary/20 border border-primary/40 text-primary hover:bg-primary hover:text-on-primary rounded font-body-sm text-body-sm font-semibold transition-all">
+                <span id="alerts-ai-spinner" class="material-symbols-outlined text-sm">auto_awesome</span>
+                <span id="alerts-ai-text">Run AI Scan Now</span>
+            </button>
+        </form>
         <a href="{{ url_for('alerts') }}" class="flex items-center gap-xs px-sm py-xs text-on-surface hover:bg-surface-variant rounded font-body-sm text-body-sm transition-colors">
             <span class="material-symbols-outlined text-sm">refresh</span>
             Refresh Now
@@ -70,25 +73,41 @@
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="border-b border-outline-variant/30 bg-surface-container-low/50">
-                        <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant w-1/4">Portfolio</th>
-                        <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant">Message</th>
+                        <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant w-1/5">Portfolio</th>
+                        <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant">AI Diagnostic Analysis</th>
                         <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant w-1/6">Time</th>
-                        <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant text-right w-24">Action</th>
+                        <th class="px-md py-sm font-label-caps text-label-caps text-on-surface-variant text-right w-20">Action</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-outline-variant/20">
                     {% for alert in alerts %}
                         <tr class="hover:bg-surface-container-highest/50 transition-colors">
-                            <td class="px-md py-sm">
+                            <td class="px-md py-sm align-top">
                                 <span class="font-body-sm text-body-sm font-medium text-primary">{{ alert.portfolio_name }}</span>
                             </td>
                             <td class="px-md py-sm">
-                                <p class="font-body-sm text-body-sm text-on-surface whitespace-pre-wrap">{{ alert.message }}</p>
+                                <div class="flex flex-col gap-1">
+                                    <div class="flex items-center gap-xs flex-wrap mb-1">
+                                        {% if "BULLISH" in alert.message or "ACCUMULATE" in alert.message %}
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-data-mono">BULLISH</span>
+                                        {% elif "BEARISH" in alert.message or "RISK_ALERT" in alert.message %}
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30 font-data-mono">BEARISH</span>
+                                        {% elif "TAKE_PROFIT" in alert.message %}
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30 font-data-mono">TAKE PROFIT</span>
+                                        {% elif "NEUTRAL" in alert.message %}
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/30 font-data-mono">NEUTRAL</span>
+                                        {% endif %}
+                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-on-surface-variant bg-surface-container border border-outline-variant/20">
+                                            <span class="material-symbols-outlined text-[10px] text-primary">auto_awesome</span> OpenRouter AI
+                                        </span>
+                                    </div>
+                                    <p class="font-body-sm text-body-sm text-on-surface leading-relaxed whitespace-pre-wrap">{{ alert.message }}</p>
+                                </div>
                             </td>
-                            <td class="px-md py-sm">
+                            <td class="px-md py-sm align-top">
                                 <span class="font-data-mono text-label-caps text-on-surface-variant">{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
                             </td>
-                            <td class="px-md py-sm text-right">
+                            <td class="px-md py-sm text-right align-top">
                                 <form action="/alert/{{ alert.id }}/dismiss" method="POST" class="inline">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button type="submit" class="text-on-surface-variant hover:text-error transition-colors p-1 rounded" title="Dismiss">
