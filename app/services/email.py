@@ -108,11 +108,16 @@ def send_via_smtp(
     host = settings.SMTP_HOST or "smtp.gmail.com"
     port = int(settings.SMTP_PORT or 587)
 
+    # Ensure no CRLF characters exist in header values to prevent header injection (SEC-06)
+    clean_subject = " ".join(str(subject).split())
+    clean_reply_to = " ".join(str(reply_to).split())
+    clean_to = " ".join(str(to_email).split())
+
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
+    msg["Subject"] = clean_subject
     msg["From"] = f"Stock Sentinel Support <{user}>"
-    msg["To"] = to_email
-    msg["Reply-To"] = reply_to
+    msg["To"] = clean_to
+    msg["Reply-To"] = clean_reply_to
 
     plain_text = f"{subject}\n\nSubmitted by: {reply_to}\n(Please reply directly to this email to respond)"
     msg.attach(MIMEText(plain_text, "plain", "utf-8"))

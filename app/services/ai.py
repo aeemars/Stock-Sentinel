@@ -15,13 +15,16 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
+import re
+
 def _build_analysis_prompt(holdings_data: List[Dict[str, Any]]) -> str:
     """Build a structured financial analysis prompt from holdings data."""
     holdings_block = ""
     for h in holdings_data:
+        clean_ticker = re.sub(r"[^A-Z0-9.\-]", "", str(h.get('ticker', '')).upper())[:10]
         pnl_str = f"{h['pnl_pct']:+.1f}%" if h.get('pnl_pct') is not None else "N/A"
         holdings_block += (
-            f"- {h['ticker']}: {h['shares']} shares, "
+            f"- {clean_ticker}: {h['shares']} shares, "
             f"Buy ${h.get('buy_price', 'N/A')}, "
             f"Current ${h.get('last_price', 'N/A')}, "
             f"P&L {pnl_str}\n"

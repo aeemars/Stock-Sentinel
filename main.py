@@ -73,10 +73,21 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
 
         return response
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Enforces defensive HTTP response headers (SEC-07): Clickjacking, MIME-sniffing, and referrer policies."""
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        return response
+
 # Mount static assets
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Middlewares (Performance & Compression outermost, then Session)
+# Middlewares (Security & Performance outermost, then Compression & Session)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(PerformanceMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(StockSentinelSessionMiddleware)

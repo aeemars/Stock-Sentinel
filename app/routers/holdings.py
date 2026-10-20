@@ -1,3 +1,5 @@
+import math
+import re
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from psycopg2.extras import RealDictCursor
@@ -8,6 +10,8 @@ from app.dependencies import get_current_user, verify_csrf
 from app.session import flash
 
 router = APIRouter(tags=["holdings"])
+
+TICKER_REGEX = re.compile(r"^[A-Z0-9.\-]{1,10}$")
 
 @router.post("/portfolio/{portfolio_id}/holding/create", name="create_holding", dependencies=[Depends(verify_csrf)], response_model=None)
 def create_holding(
@@ -27,11 +31,15 @@ def create_holding(
         flash(request, "Ticker and shares are required", "error")
         return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
 
+    if not TICKER_REGEX.match(ticker):
+        flash(request, "Invalid ticker symbol format. Use 1-10 alphanumeric characters (e.g. AAPL, BRK.B).", "error")
+        return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
+
     try:
         shares_val = float(shares_str)
-        if shares_val <= 0:
-            raise ValueError("Shares must be positive")
-    except ValueError as e:
+        if not math.isfinite(shares_val) or shares_val <= 0 or shares_val > 10_000_000:
+            raise ValueError("Shares must be a positive number up to 10,000,000.")
+    except (ValueError, TypeError) as e:
         flash(request, f"Invalid shares value: {str(e)}", "error")
         return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
 
@@ -40,11 +48,11 @@ def create_holding(
     if buy_price_str:
         try:
             parsed_bp = float(buy_price_str)
-            if parsed_bp <= 0:
-                flash(request, "Buy price must be positive", "error")
+            if not math.isfinite(parsed_bp) or parsed_bp <= 0 or parsed_bp > 10_000_000:
+                flash(request, "Buy price must be a positive number up to $10,000,000.", "error")
                 return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
             entry_price = parsed_bp
-        except ValueError:
+        except (ValueError, TypeError):
             flash(request, "Invalid buy price format", "error")
             return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
 

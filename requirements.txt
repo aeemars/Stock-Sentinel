@@ -12,3 +12,4 @@ yfinance>=1.4.1
 python-slugify>=8.0.1
 psycopg2-binary>=2.9.12
 bcrypt>=4.1.2
+pymemcache>=4.0.0

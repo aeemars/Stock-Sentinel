@@ -73,12 +73,21 @@ class StockSentinelSessionMiddleware(BaseHTTPMiddleware):
         current_repr = str(sorted((k, str(v)) for k, v in session_data.items()))
         if current_repr != initial_repr or not cookie:
             token = dump_session(session_data)
+            is_https = (
+                request.url.scheme == "https"
+                or request.headers.get("x-forwarded-proto") == "https"
+                or request.headers.get("x-forwarded-ssl") == "on"
+            )
+            is_secure = (
+                settings.SESSION_COOKIE_SECURE is True
+                or (settings.SESSION_COOKIE_SECURE is None and (settings.is_vercel or is_https))
+            )
             response.set_cookie(
                 key=SESSION_COOKIE_NAME,
                 value=token,
                 max_age=MAX_AGE,
                 httponly=True,
                 samesite="lax",
-                secure=bool(settings.is_vercel),
+                secure=is_secure,
             )
         return response

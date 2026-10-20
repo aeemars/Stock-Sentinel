@@ -1,9 +1,11 @@
+import logging
 import secrets
 from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, status
 from app.config import settings
 from roma.workflow import run_root_workflow
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["api"])
 
 @router.post("/run-workflow", name="run_workflow_api")
@@ -26,7 +28,8 @@ def run_workflow_api(authorization: Optional[str] = Header(None)):
         run_root_workflow()
         return {"status": "success"}
     except Exception as e:
+        logger.exception("[Workflow API Error]: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail="Internal workflow execution error"
         )

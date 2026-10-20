@@ -339,3 +339,66 @@ def test_on_demand_ai_endpoints_unauth():
     assert "/login" in resp3.headers.get("location", "")
     client.cookies.clear()
 
+
+def test_security_redirect_validation():
+    from app.dependencies import is_safe_redirect
+    from starlette.requests import Request
+
+    scope = {"type": "http", "method": "GET", "path": "/", "headers": [(b"host", b"testserver")]}
+    req = Request(scope)
+
+    # Malicious inputs must be rejected (SEC-01)
+    assert is_safe_redirect(req, "javascript:alert(1)") is False
+    assert is_safe_redirect(req, "data:text/html,<script>alert(1)</script>") is False
+    assert is_safe_redirect(req, "vbscript:msgbox(1)") is False
+    assert is_safe_redirect(req, "/\\attacker.com") is False
+    assert is_safe_redirect(req, "//attacker.com") is False
+    assert is_safe_redirect(req, "\\\\attacker.com") is False
+    assert is_safe_redirect(req, "https://evil.com/phish") is False
+    assert is_safe_redirect(req, None) is False
+    assert is_safe_redirect(req, "") is False
+
+    # Safe local targets must be allowed
+    assert is_safe_redirect(req, "/dashboard") is True
+    assert is_safe_redirect(req, "/portfolio/1") is True
+    assert is_safe_redirect(req, "http://testserver/dashboard") is True
+
+
+def test_security_response_headers():
+    resp = client.get("/login")
+    assert resp.status_code == 200
+    assert resp.headers.get("x-frame-options") == "DENY"
+    assert resp.headers.get("x-content-type-options") == "nosniff"
+    assert resp.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
+
+
+def test_security_rate_limiting():
+    from app.services.cache import check_rate_limit, record_rate_limit, reset_rate_limit
+    test_key = "test_rate_limiter_key"
+    reset_rate_limit(test_key)
+
+    assert check_rate_limit(test_key, max_attempts=3) is True
+    assert record_rate_limit(test_key, 60) == 1
+    assert record_rate_limit(test_key, 60) == 2
+    assert check_rate_limit(test_key, max_attempts=3) is True
+    assert record_rate_limit(test_key, 60) == 3
+    assert check_rate_limit(test_key, max_attempts=3) is False
+    reset_rate_limit(test_key)
+    assert check_rate_limit(test_key, max_attempts=3) is True
+
+
+def test_security_ticker_regex_validation():
+    from app.routers.holdings import TICKER_REGEX
+    assert TICKER_REGEX.match("AAPL") is not None
+    assert TICKER_REGEX.match("BRK.B") is not None
+    assert TICKER_REGEX.match("BTC-USD") is not None
+    assert TICKER_REGEX.match("NVDA") is not None
+
+    # Malicious or invalid symbols (SEC-05)
+    assert TICKER_REGEX.match("AAPL; DROP TABLE") is None
+    assert TICKER_REGEX.match("AAPL<script>") is None
+    assert TICKER_REGEX.match("AAPL\nIGNORE") is None
+    assert TICKER_REGEX.match("VERYLONGTICKERNAMEEXCEEDING10") is None
+    assert TICKER_REGEX.match("") is None
+
+

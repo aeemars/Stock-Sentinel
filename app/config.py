@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     ENVIRONMENT: Optional[str] = None
     VERCEL: Optional[str] = None
 
+    # Session & Security
+    SESSION_COOKIE_SECURE: Optional[bool] = None
+    MAX_LOGIN_ATTEMPTS: int = 5
+    LOGIN_LOCKOUT_SECONDS: int = 60
+
+    # Memcached Centralized Cache (e.g. 127.0.0.1:11211)
+    MEMCACHED_SERVERS: Optional[str] = None
+
     # Support Email Notifications via Standard SMTP (e.g. Gmail App Password)
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587

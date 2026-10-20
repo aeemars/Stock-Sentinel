@@ -17,11 +17,25 @@ class CSRFValidationException(Exception):
         super().__init__(f"CSRF verification failed; redirect to {redirect_url}")
 
 def is_safe_redirect(request: Request, target: Optional[str]) -> bool:
+    if not target or not isinstance(target, str):
+        return False
+    target = target.strip()
     if not target:
         return False
-    ref = urlsplit(str(request.base_url))
+
     test = urlsplit(target)
-    return not test.netloc or (test.scheme in ('http', 'https') and test.netloc == ref.netloc)
+
+    # If scheme is present, it MUST be http or https, and netloc MUST match current host
+    if test.scheme:
+        if test.scheme not in ('http', 'https'):
+            return False
+        ref = urlsplit(str(request.base_url))
+        return test.netloc == ref.netloc
+
+    # Relative paths: must start with exactly one '/', not '//', '/\', or '\'
+    if target.startswith('/') and not target.startswith(('//', '/\\', '\\')):
+        return not test.netloc
+    return False
 
 def is_api_request(request: Request) -> bool:
     """Detect if an incoming request explicitly expects a JSON API response rather than HTML."""
@@ -95,6 +109,8 @@ async def verify_csrf(request: Request) -> None:
         submitted = form.get("csrf_token", "")
         expected = request.state.session.get("_csrf_token", "")
         if not expected or not secrets.compare_digest(expected, str(submitted)):
+            if is_api_request(request):
+                raise HTTPException(status_code=403, detail="CSRF verification failed")
             flash(request, "Your session expired. Please try again.", "error")
             ref = request.headers.get("referer")
             dest = ref if is_safe_redirect(request, ref) else str(request.url_for("dashboard"))

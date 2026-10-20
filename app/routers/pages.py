@@ -24,8 +24,9 @@ async def support_contact(
     message: str = Form(""),
     current_user=Depends(get_current_user),
 ):
-    subject = subject.strip()
-    category = category.strip().lower()
+    # Strip any newline / carriage-return characters to prevent SMTP header injection (SEC-06)
+    subject = " ".join(subject.split())
+    category = " ".join(category.split()).lower()
     message = message.strip()
 
     if not subject:
