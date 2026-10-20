@@ -2,7 +2,7 @@
 <html class="dark" lang="en">
 <head>
     <meta charset="utf-8"/>
-    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
     <script>
         // Intercept and suppress external browser extension injection errors (e.g. Zerion/MetaMask wallet collisions)
         window.addEventListener('unhandledrejection', function(event) {
@@ -120,6 +120,12 @@
         }
     </script>
     <style>
+        /* ── Global Resets for Mobile ── */
+        html, body {
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+
         .glass-card, .glass-panel {
             background-color: rgba(255, 255, 255, 0.04);
             backdrop-filter: blur(12px);
@@ -141,12 +147,19 @@
         #drawerOverlay { opacity: 0; pointer-events: none; }
         #drawerOverlay.open { opacity: 1; pointer-events: auto; }
 
-        /* Mobile-friendly text */
+        /* ── Mobile-Specific Styles ── */
         @media (max-width: 768px) {
             .text-display-lg { font-size: 28px !important; line-height: 36px !important; }
         }
 
-        /* Mobile card layouts */
+        /* Prevent iOS Safari auto-zoom on focus (inputs below 16px trigger it) */
+        @media (max-width: 1023px) {
+            input, select, textarea {
+                font-size: 16px !important;
+            }
+        }
+
+        /* Mobile card layouts (dual-view: desktop table / mobile cards) */
         .mobile-card { display: none; }
         @media (max-width: 640px) {
             .desktop-table { display: none !important; }
@@ -154,6 +167,58 @@
         }
         @media (min-width: 641px) {
             .mobile-card { display: none !important; }
+        }
+
+        /* ── Bottom Tab Bar Active Pill Glow ── */
+        .mobile-tab-active {
+            position: relative;
+        }
+        .mobile-tab-active::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 28px;
+            border-radius: 9999px;
+            background: rgba(173, 198, 255, 0.12);
+            box-shadow: 0 0 12px rgba(77, 142, 255, 0.25);
+            z-index: -1;
+        }
+
+        /* ── Mobile Top Bar & Main Content Clearance ── */
+        .mobile-top-bar {
+            height: calc(3.5rem + env(safe-area-inset-top, 0px));
+            padding-top: env(safe-area-inset-top, 0px);
+            box-sizing: border-box;
+        }
+
+        #mainContent {
+            /* Mobile: clear the 3.5rem fixed top bar + safe area, ensuring page headers are never obscured */
+            padding-top: calc(5rem + env(safe-area-inset-top, 0px)) !important;
+            /* Mobile: clear the 3.5rem bottom tab bar + safe area with breathing room */
+            padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important;
+            padding-left: 1rem;
+            padding-right: 1rem;
+            box-sizing: border-box;
+        }
+
+        @media (min-width: 768px) {
+            #mainContent {
+                padding-left: 2rem;
+                padding-right: 2rem;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            #mainContent {
+                /* Desktop: no mobile top bar or bottom tab bar; standard page margins */
+                padding-top: 2.5rem !important;
+                padding-bottom: 2.5rem !important;
+                padding-left: 2.5rem;
+                padding-right: 2.5rem;
+            }
         }
     </style>
     {% block extra_css %}{% endblock %}
@@ -208,7 +273,7 @@
     </nav>
 
     <!-- Mobile Top Bar -->
-    <header class="lg:hidden fixed top-0 left-0 w-full z-50 flex justify-between items-center px-margin-mobile h-14 bg-surface/90 backdrop-blur-xl border-b border-outline-variant/20">
+    <header class="mobile-top-bar lg:hidden fixed top-0 left-0 w-full z-50 flex justify-between items-center px-4 bg-surface/95 backdrop-blur-xl border-b border-outline-variant/20">
         <div class="flex items-center gap-xs">
             <span class="material-symbols-outlined text-primary text-2xl" style="font-variation-settings: 'FILL' 1;">monitoring</span>
             <span class="font-headline-md text-on-surface tracking-tight font-bold text-lg">Stock Sentinel</span>
@@ -222,7 +287,7 @@
     <div id="drawerOverlay" onclick="toggleDrawer()" class="lg:hidden fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm transition-opacity duration-300"></div>
 
     <!-- Mobile Slide-Out Drawer -->
-    <nav id="mobileDrawer" class="lg:hidden fixed top-0 left-0 z-[70] w-72 h-full bg-surface border-r border-outline-variant/20 flex flex-col p-md gap-xs transition-transform duration-300 ease-out overflow-y-auto">
+    <nav id="mobileDrawer" class="lg:hidden fixed top-0 left-0 z-[70] w-72 h-full bg-surface border-r border-outline-variant/20 flex flex-col p-md gap-xs transition-transform duration-300 ease-out overflow-y-auto" style="padding-top: max(1rem, env(safe-area-inset-top, 0px)); padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));">
         <div class="flex items-center justify-between mb-lg">
             <div class="flex items-center gap-sm">
                 <span class="material-symbols-outlined text-primary text-2xl" style="font-variation-settings: 'FILL' 1;">monitoring</span>
@@ -268,21 +333,21 @@
     </nav>
 
     <!-- Mobile Bottom Tab Bar -->
-    <nav class="lg:hidden fixed bottom-0 left-0 w-full z-40 bg-surface/95 backdrop-blur-xl border-t border-outline-variant/20">
+    <nav class="lg:hidden fixed bottom-0 left-0 w-full z-40 bg-surface/95 backdrop-blur-xl border-t border-outline-variant/20" style="padding-bottom: max(0.25rem, env(safe-area-inset-bottom, 0px)); height: calc(3.5rem + env(safe-area-inset-bottom, 0px));">
         <div class="flex justify-around items-center h-14 px-xs max-w-lg mx-auto">
-            <a href="{{ url_for('dashboard') }}" class="flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-colors {% if request.endpoint in ['dashboard', 'view_portfolio'] %}text-primary{% else %}text-on-surface-variant{% endif %}">
+            <a href="{{ url_for('dashboard') }}" class="flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] py-1 px-3 rounded-xl transition-colors {% if request.endpoint in ['dashboard', 'view_portfolio'] %}text-primary mobile-tab-active{% else %}text-on-surface-variant active:text-on-surface active:bg-surface-container-high{% endif %}">
                 <span class="material-symbols-outlined text-xl" {% if request.endpoint in ['dashboard', 'view_portfolio'] %}style="font-variation-settings: 'FILL' 1;"{% endif %}>wallet</span>
                 <span class="text-[10px] font-semibold leading-none">Portfolios</span>
             </a>
-            <a href="{{ url_for('alerts') }}" class="flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-colors {% if request.endpoint == 'alerts' %}text-primary{% else %}text-on-surface-variant{% endif %}">
+            <a href="{{ url_for('alerts') }}" class="flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] py-1 px-3 rounded-xl transition-colors {% if request.endpoint == 'alerts' %}text-primary mobile-tab-active{% else %}text-on-surface-variant active:text-on-surface active:bg-surface-container-high{% endif %}">
                 <span class="material-symbols-outlined text-xl" {% if request.endpoint == 'alerts' %}style="font-variation-settings: 'FILL' 1;"{% endif %}>notifications_active</span>
                 <span class="text-[10px] font-semibold leading-none">Alerts</span>
             </a>
-            <a href="{{ url_for('analytics') }}" class="flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-colors {% if request.endpoint == 'analytics' %}text-primary{% else %}text-on-surface-variant{% endif %}">
+            <a href="{{ url_for('analytics') }}" class="flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] py-1 px-3 rounded-xl transition-colors {% if request.endpoint == 'analytics' %}text-primary mobile-tab-active{% else %}text-on-surface-variant active:text-on-surface active:bg-surface-container-high{% endif %}">
                 <span class="material-symbols-outlined text-xl" {% if request.endpoint == 'analytics' %}style="font-variation-settings: 'FILL' 1;"{% endif %}>query_stats</span>
                 <span class="text-[10px] font-semibold leading-none">Analytics</span>
             </a>
-            <a href="{{ url_for('settings') }}" class="flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-colors {% if request.endpoint == 'settings' %}text-primary{% else %}text-on-surface-variant{% endif %}">
+            <a href="{{ url_for('settings') }}" class="flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] py-1 px-3 rounded-xl transition-colors {% if request.endpoint == 'settings' %}text-primary mobile-tab-active{% else %}text-on-surface-variant active:text-on-surface active:bg-surface-container-high{% endif %}">
                 <span class="material-symbols-outlined text-xl" {% if request.endpoint == 'settings' %}style="font-variation-settings: 'FILL' 1;"{% endif %}>settings</span>
                 <span class="text-[10px] font-semibold leading-none">Settings</span>
             </a>
@@ -290,7 +355,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="flex-1 lg:ml-64 pt-16 pb-16 lg:pt-0 lg:pb-0 p-margin-mobile md:p-margin-desktop min-h-screen flex flex-col max-w-[1600px] mx-auto w-full">
+    <main id="mainContent" class="flex-1 lg:ml-64 min-h-screen flex flex-col max-w-[1600px] mx-auto w-full">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 <div class="mb-md flex flex-col gap-sm w-full">

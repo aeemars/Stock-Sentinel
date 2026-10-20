@@ -12,15 +12,15 @@
         </h2>
         <p class="font-body-lg text-body-lg text-on-surface-variant">Monitor critical market events and portfolio triggers.</p>
     </div>
-    <div class="flex items-center gap-sm bg-surface-container rounded-lg p-1 border border-outline-variant/30">
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-sm">
         <form method="POST" action="/alerts/scan-ai" class="inline" onsubmit="document.getElementById('alerts-ai-spinner').classList.add('animate-spin'); document.getElementById('alerts-ai-text').textContent='Scanning...';">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <button id="btn-scan-alerts-ai" type="submit" class="flex items-center gap-xs px-sm py-xs bg-primary/20 border border-primary/40 text-primary hover:bg-primary hover:text-on-primary rounded font-body-sm text-body-sm font-semibold transition-all">
+            <button id="btn-scan-alerts-ai" type="submit" class="flex items-center justify-center gap-xs px-sm py-xs bg-primary/20 border border-primary/40 text-primary hover:bg-primary hover:text-on-primary rounded-lg font-body-sm text-body-sm font-semibold transition-all min-h-[44px] w-full sm:w-auto">
                 <span id="alerts-ai-spinner" class="material-symbols-outlined text-sm">auto_awesome</span>
                 <span id="alerts-ai-text">Run AI Scan Now</span>
             </button>
         </form>
-        <a href="{{ url_for('alerts') }}" class="flex items-center gap-xs px-sm py-xs text-on-surface hover:bg-surface-variant rounded font-body-sm text-body-sm transition-colors">
+        <a href="{{ url_for('alerts') }}" class="flex items-center justify-center gap-xs px-sm py-xs text-on-surface hover:bg-surface-variant rounded-lg font-body-sm text-body-sm transition-colors border border-outline-variant/30 min-h-[44px]">
             <span class="material-symbols-outlined text-sm">refresh</span>
             Refresh Now
         </a>
@@ -69,7 +69,8 @@
 <!-- Alerts Data Table / Empty State -->
 <div class="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden relative">
     {% if alerts %}
-        <div class="overflow-x-auto">
+        <!-- Desktop Table -->
+        <div class="overflow-x-auto desktop-table">
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="border-b border-outline-variant/30 bg-surface-container-low/50">
@@ -119,6 +120,41 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <!-- Mobile Alert Cards -->
+        <div class="mobile-card flex flex-col gap-sm p-sm">
+            {% for alert in alerts %}
+            <div class="bg-surface-container-high/50 rounded-xl p-md border border-outline-variant/20">
+                <div class="flex items-start justify-between mb-sm">
+                    <div class="flex items-center gap-xs flex-wrap flex-1">
+                        <span class="font-body-sm text-body-sm font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">{{ alert.portfolio_name }}</span>
+                        {% if "BULLISH" in alert.message or "ACCUMULATE" in alert.message %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-data-mono">BULLISH</span>
+                        {% elif "BEARISH" in alert.message or "RISK_ALERT" in alert.message %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30 font-data-mono">BEARISH</span>
+                        {% elif "TAKE_PROFIT" in alert.message %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30 font-data-mono">TAKE PROFIT</span>
+                        {% elif "NEUTRAL" in alert.message %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/30 font-data-mono">NEUTRAL</span>
+                        {% endif %}
+                    </div>
+                    <form action="/alert/{{ alert.id }}/dismiss" method="POST" class="inline flex-shrink-0 ml-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="w-9 h-9 flex items-center justify-center rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors" title="Dismiss">
+                            <span class="material-symbols-outlined text-lg">close</span>
+                        </button>
+                    </form>
+                </div>
+                <p class="font-body-sm text-body-sm text-on-surface leading-relaxed whitespace-pre-wrap mb-sm">{{ alert.message }}</p>
+                <div class="flex items-center justify-between text-[11px]">
+                    <span class="font-data-mono text-on-surface-variant">{{ alert.created_at.strftime('%b %d, %Y · %H:%M') }}</span>
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-on-surface-variant bg-surface-container border border-outline-variant/20">
+                        <span class="material-symbols-outlined text-[10px] text-primary">auto_awesome</span> OpenRouter AI
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
         </div>
     {% else %}
         <!-- Empty State -->

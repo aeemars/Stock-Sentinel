@@ -128,10 +128,8 @@
             <div class="flex items-center gap-xs">
                 <span class="material-symbols-outlined text-primary">list_alt</span>
                 <h3 class="font-headline-md text-headline-md text-lg">Current Holdings</h3>
-            </div>
-            <div class="flex items-center gap-sm">
-                <!-- Dynamic Feed Status Pill -->
-                <div id="live-indicator" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <!-- Dynamic Feed Status Pill (inline on desktop, next to title on mobile) -->
+                <div id="live-indicator" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 ml-auto sm:ml-2">
                     <span class="relative flex h-2 w-2">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -141,15 +139,18 @@
                         {% if last_updated_at %}{{ last_updated_at.strftime('%H:%M:%S') }}{% else %}Synced{% endif %}
                     </span>
                 </div>
-                <!-- Interactive Dynamic Refresh Button -->
+            </div>
+            <!-- Action Buttons: side-by-side on desktop, stacked full-width on small mobile -->
+            <div class="flex items-center gap-sm w-full sm:w-auto">
                 <button id="btn-refresh-prices"
                         type="button"
                         onclick="refreshLivePrices(true)"
                         title="Fetch dynamic market prices from Yahoo Finance"
-                        class="flex items-center gap-xs px-sm py-xs rounded-lg
+                        class="flex items-center justify-center gap-xs px-sm py-xs rounded-lg
                                border border-outline-variant/30 text-on-surface-variant
                                font-body-sm text-body-sm hover:bg-surface-variant
-                               hover:text-primary transition-all cursor-pointer">
+                               hover:text-primary transition-all cursor-pointer
+                               flex-1 sm:flex-none min-h-[44px]">
                     <span id="refresh-spinner" class="material-symbols-outlined text-sm transition-transform">refresh</span>
                     <span id="refresh-label">Refresh</span>
                 </button>
@@ -160,16 +161,16 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 </form>
 
-                <!-- Interactive Run AI Analysis Button -->
-                <form method="POST" action="/portfolio/{{ portfolio.id }}/analyze-ai" class="inline" onsubmit="document.getElementById('ai-btn-spinner').classList.add('animate-spin'); document.getElementById('ai-btn-text').textContent='Analyzing...';">
+                <form method="POST" action="/portfolio/{{ portfolio.id }}/analyze-ai" class="inline flex-1 sm:flex-none" onsubmit="document.getElementById('ai-btn-spinner').classList.add('animate-spin'); document.getElementById('ai-btn-text').textContent='Analyzing...';">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button id="btn-run-ai"
                             type="submit"
                             title="Run AI diagnostic on this portfolio's holdings"
-                            class="flex items-center gap-xs px-sm py-xs rounded-lg
+                            class="flex items-center justify-center gap-xs px-sm py-xs rounded-lg
                                    bg-primary/10 border border-primary/30 text-primary
                                    font-body-sm text-body-sm hover:bg-primary hover:text-on-primary
-                                   transition-all cursor-pointer shadow-sm">
+                                   transition-all cursor-pointer shadow-sm
+                                   w-full min-h-[44px]">
                         <span id="ai-btn-spinner" class="material-symbols-outlined text-sm">auto_awesome</span>
                         <span id="ai-btn-text">Run AI Analysis</span>
                     </button>
@@ -350,18 +351,18 @@
                             </div>
                         </div>
                         <div class="flex gap-xs">
-                            <a href="/holding/{{ holding.id }}/edit" class="p-xs rounded text-on-surface-variant hover:text-primary">
+                            <a href="/holding/{{ holding.id }}/edit" class="w-11 h-11 flex items-center justify-center rounded-lg text-on-surface-variant hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                                 <span class="material-symbols-outlined text-xl">edit</span>
                             </a>
                             <form action="/holding/{{ holding.id }}/delete" method="POST" class="inline" onsubmit="return confirm('Remove {{ holding.ticker }}?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <button type="submit" class="p-xs rounded text-on-surface-variant hover:text-error">
+                                <button type="submit" class="w-11 h-11 flex items-center justify-center rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors" title="Delete">
                                     <span class="material-symbols-outlined text-xl">delete</span>
                                 </button>
                             </form>
                         </div>
                     </div>
-                    <div class="grid grid-cols-2 gap-sm sm:grid-cols-4">
+                    <div class="grid grid-cols-2 gap-sm">
                         <div>
                             <span class="font-label-caps text-label-caps text-on-surface-variant block">Shares</span>
                             <span class="font-data-mono text-body-sm text-secondary">{{ holding.shares }}</span>
@@ -385,6 +386,16 @@
                             </span>
                         </div>
                         <div>
+                            <span class="font-label-caps text-label-caps text-on-surface-variant block">Mkt Value</span>
+                            <span id="mobile-mktval-{{ holding.id }}" class="font-data-mono text-body-sm text-secondary font-semibold">
+                                {% if holding.market_value %}
+                                    ${{ "%.2f"|format(holding.market_value) }}
+                                {% else %}
+                                    &mdash;
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="col-span-2">
                             <span class="font-label-caps text-label-caps text-on-surface-variant block">Profit / Loss</span>
                             <div id="mobile-pnl-{{ holding.id }}">
                                 {% if holding.pnl is not none %}
@@ -397,6 +408,54 @@
                             </div>
                         </div>
                     </div>
+                    {% if holding.history %}
+                    <details class="mt-sm border-t border-outline-variant/20 pt-sm">
+                        <summary class="cursor-pointer text-on-surface-variant font-body-sm text-body-sm hover:text-on-surface transition-colors flex items-center gap-xs">
+                            <span class="material-symbols-outlined text-sm">history</span>
+                            History ({{ holding.history|length }})
+                        </summary>
+                        <div class="mt-sm flex flex-col gap-xs">
+                            {% for snap in holding.history %}
+                            <div class="bg-surface-container-low/60 rounded-lg p-sm border border-outline-variant/10">
+                                <div class="flex items-center justify-between mb-xs">
+                                    <span class="font-data-mono text-[11px] text-on-surface-variant">
+                                        {{ snap.created_at.strftime('%Y-%m-%d %H:%M') if snap.created_at else '&mdash;'|safe }}
+                                    </span>
+                                    <span class="font-data-mono text-[11px] text-on-surface bg-surface-container-high px-1.5 py-0.5 rounded">{{ snap.event }}</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-xs text-xs">
+                                    <div>
+                                        <span class="text-on-surface-variant">Shares +</span>
+                                        <span class="font-data-mono text-on-surface">{{ snap.shares_delta }}</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-on-surface-variant">Total</span>
+                                        <span class="font-data-mono text-on-surface">{{ snap.shares_total }}</span>
+                                    </div>
+                                    {% if snap.price_at_event is not none %}
+                                    <div>
+                                        <span class="text-on-surface-variant">Price @</span>
+                                        <span class="font-data-mono text-on-surface">{{ '%.2f' % snap.price_at_event }}</span>
+                                    </div>
+                                    {% endif %}
+                                    {% if snap.value_before is not none and snap.value_after is not none %}
+                                    <div>
+                                        <span class="text-on-surface-variant">Change</span>
+                                        {% if snap.value_after > snap.value_before %}
+                                            <span class="font-data-mono text-emerald-400">&#9650; ${{ '%.2f' % (snap.value_after - snap.value_before) }}</span>
+                                        {% elif snap.value_after < snap.value_before %}
+                                            <span class="font-data-mono text-rose-400">&#9660; ${{ '%.2f' % (snap.value_before - snap.value_after) }}</span>
+                                        {% else %}
+                                            <span class="font-data-mono text-on-surface-variant">&mdash;</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </details>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
@@ -500,8 +559,10 @@ function updatePortfolioDOM(data) {
                 }
             }
 
-            if (holding.market_value != null && mktvalEl) {
-                mktvalEl.textContent = `$${holding.market_value.toFixed(2)}`;
+            if (holding.market_value != null) {
+                if (mktvalEl) mktvalEl.textContent = `$${holding.market_value.toFixed(2)}`;
+                const mobileMktvalEl = document.getElementById(`mobile-mktval-${holding.id}`);
+                if (mobileMktvalEl) mobileMktvalEl.textContent = `$${holding.market_value.toFixed(2)}`;
             }
 
             // P&L update

@@ -257,8 +257,10 @@ def test_smtp_email_dispatch(monkeypatch):
     mock_smtp_instance.send_message.assert_called_once()
 
 
-def test_ai_simulation_fallback():
+def test_ai_simulation_fallback(monkeypatch):
     from app.services.ai import analyze_holdings, format_analysis_as_alert, _simulate_analysis
+    from app.config import settings
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "")
 
     holdings_data = [
         {"ticker": "NVDA", "shares": 10.0, "buy_price": 100.0, "last_price": 135.0, "pnl_pct": 35.0},

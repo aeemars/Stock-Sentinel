@@ -15,8 +15,8 @@
 </header>
 
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
-    <!-- Statistics Bento Box -->
-    <div class="lg:col-span-4 flex flex-col gap-gutter">
+    <!-- Statistics Bento Box (order-4 on mobile, so portfolios appear first) -->
+    <div class="lg:col-span-4 flex flex-col gap-gutter order-4 lg:order-none">
         <div class="glass-card rounded-xl p-lg flex flex-col gap-md">
             <div class="flex items-center gap-xs text-on-surface-variant border-b border-outline-variant/20 pb-sm">
                 <span class="material-symbols-outlined">bar_chart</span>
@@ -34,8 +34,8 @@
             </div>
         </div>
 
-        <!-- Create Form Widget -->
-        <div class="glass-card rounded-xl p-lg flex flex-col gap-md border-t-2 border-primary glow-active">
+        <!-- Create Form Widget (order-2 on mobile) -->
+        <div class="glass-card rounded-xl p-lg flex flex-col gap-md border-t-2 border-primary glow-active order-2 lg:order-none">
             <div class="flex items-center gap-xs text-primary mb-sm">
                 <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add_circle</span>
                 <h3 class="font-headline-md text-headline-md text-lg">Quick Create</h3>
@@ -57,8 +57,8 @@
             </form>
         </div>
 
-        <!-- AI Intelligence Pulse Card -->
-        <div class="glass-card rounded-xl p-lg flex flex-col gap-md border border-primary/20 relative overflow-hidden">
+        <!-- AI Intelligence Pulse Card (order-3 on mobile) -->
+        <div class="glass-card rounded-xl p-lg flex flex-col gap-md border border-primary/20 relative overflow-hidden order-3 lg:order-none">
             <div class="flex items-center justify-between border-b border-outline-variant/20 pb-sm">
                 <div class="flex items-center gap-xs text-primary">
                     <span class="material-symbols-outlined text-base">auto_awesome</span>
@@ -95,8 +95,8 @@
         </div>
     </div>
 
-    <!-- Main Portfolios Canvas -->
-    <div class="lg:col-span-8">
+    <!-- Main Portfolios Canvas (order-1 on mobile, appears first) -->
+    <div class="lg:col-span-8 order-1 lg:order-none">
         {% if portfolios %}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
             {% for portfolio in portfolios %}
@@ -122,12 +122,12 @@
                             <span class="font-data-mono text-body-lg text-secondary">{{ portfolio.holdings|length if portfolio.holdings else '0' }}</span>
                         </div>
                         <div class="flex gap-xs">
-                            <a href="/portfolio/{{ portfolio.id }}" class="p-xs rounded-lg text-primary hover:bg-primary/10 transition-colors tooltip" title="View Details">
+                            <a href="/portfolio/{{ portfolio.id }}" class="w-11 h-11 flex items-center justify-center rounded-lg text-primary hover:bg-primary/10 transition-colors" title="View Details">
                                 <span class="material-symbols-outlined">visibility</span>
                             </a>
                             <form action="/portfolio/{{ portfolio.id }}/delete" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to delete {{ portfolio.name }}?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <button type="submit" class="p-xs rounded-lg text-error hover:bg-error/10 transition-colors tooltip" title="Delete">
+                                <button type="submit" class="w-11 h-11 flex items-center justify-center rounded-lg text-error hover:bg-error/10 transition-colors" title="Delete">
                                     <span class="material-symbols-outlined">delete</span>
                                 </button>
                             </form>

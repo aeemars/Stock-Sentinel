@@ -2,7 +2,7 @@
 <html class="dark" lang="en">
 <head>
     <meta charset="utf-8"/>
-    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
     <title>Create Account - Stock Sentinel</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"/>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
@@ -63,6 +63,10 @@
         }
     </script>
     <style>
+        html, body {
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
         .glass-card {
             background-color: rgba(255, 255, 255, 0.04);
             backdrop-filter: blur(12px);
@@ -75,6 +79,12 @@
         }
         .glow-active {
             box-shadow: 0 0 40px rgba(77, 142, 255, 0.12);
+        }
+        /* Prevent iOS Safari auto-zoom on focus */
+        @media (max-width: 1023px) {
+            input, select, textarea {
+                font-size: 16px !important;
+            }
         }
     </style>
 </head>
@@ -134,7 +144,7 @@
                            class="w-full bg-surface-container-high border border-outline-variant/50 rounded-lg px-sm py-sm text-on-surface font-body-sm text-body-sm input-glow outline-none transition-shadow"
                            placeholder="Repeat your password"/>
                 </div>
-                <button type="submit" class="w-full py-sm rounded-lg bg-primary text-on-primary font-body-sm font-bold hover:bg-primary-container transition-colors shadow-[0_0_20px_rgba(173,198,255,0.15)]">
+                <button type="submit" class="w-full py-sm rounded-lg bg-primary text-on-primary font-body-sm font-bold hover:bg-primary-container transition-colors shadow-[0_0_20px_rgba(173,198,255,0.15)] min-h-[48px]">
                     Create Account
                 </button>
             </form>
