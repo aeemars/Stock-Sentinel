@@ -402,3 +402,40 @@ def test_security_ticker_regex_validation():
     assert TICKER_REGEX.match("") is None
 
 
+def test_pwa_manifest_endpoint():
+    resp = client.get("/manifest.webmanifest")
+    assert resp.status_code == 200
+    assert "application/manifest+json" in resp.headers.get("content-type", "")
+    manifest = resp.json()
+    assert manifest["short_name"] == "Stock Sentinel"
+    assert manifest["display"] == "standalone"
+    assert manifest["start_url"] == "/dashboard"
+    assert len(manifest["icons"]) >= 4
+
+
+def test_pwa_service_worker_endpoint():
+    resp = client.get("/sw.js")
+    assert resp.status_code == 200
+    assert "javascript" in resp.headers.get("content-type", "")
+    assert resp.headers.get("service-worker-allowed") == "/"
+    assert "CACHE_NAME" in resp.text
+    assert "stock-sentinel" in resp.text
+
+
+def test_pwa_offline_fallback_page():
+    resp = client.get("/offline")
+    assert resp.status_code == 200
+    assert "You're Offline" in resp.text
+    assert "Stock Sentinel" in resp.text
+
+
+def test_pwa_meta_tags_in_templates():
+    resp = client.get("/login")
+    assert resp.status_code == 200
+    assert 'rel="manifest" href="/manifest.webmanifest"' in resp.text
+    assert 'name="apple-mobile-web-app-capable" content="yes"' in resp.text
+    assert 'name="theme-color" content="#10131a"' in resp.text
+    assert 'sw.js' in resp.text
+
+
+

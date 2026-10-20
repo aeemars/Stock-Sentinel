@@ -24,6 +24,17 @@
         });
     </script>
     <title>{% block title %}Stock Sentinel{% endblock %}</title>
+    <!-- PWA & Native Web App Meta Tags -->
+    <meta name="theme-color" content="#10131a"/>
+    <meta name="mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+    <meta name="apple-mobile-web-app-title" content="Stock Sentinel"/>
+    <meta name="application-name" content="Stock Sentinel"/>
+    <meta name="msapplication-TileColor" content="#10131a"/>
+    <link rel="manifest" href="/manifest.webmanifest"/>
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}"/>
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}"/>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"/>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -265,6 +276,10 @@
                 <span class="material-symbols-outlined {% if request.endpoint != 'support' %}group-hover:text-primary transition-colors{% endif %}" {% if request.endpoint == 'support' %}style="font-variation-settings: 'FILL' 1;"{% endif %}>help_outline</span>
                 Support
             </a>
+            <button id="pwaInstallBtn" onclick="installPWA()" class="hidden items-center gap-sm p-sm text-secondary hover:text-white hover:bg-secondary/20 rounded-lg transition-all font-body-sm text-body-sm group text-left w-full border border-secondary/30 mb-xs">
+                <span class="material-symbols-outlined text-secondary group-hover:scale-110 transition-transform">download_for_offline</span>
+                Install App
+            </button>
             <a href="{{ url_for('logout') }}" class="flex items-center gap-sm p-sm text-error/80 hover:text-error hover:bg-error-container/10 rounded-lg transition-colors font-body-sm text-body-sm group">
                 <span class="material-symbols-outlined group-hover:scale-110 transition-transform">logout</span>
                 Sign Out
@@ -327,7 +342,11 @@
             </a>
         </div>
 
-        <a href="{{ url_for('logout') }}" class="flex items-center gap-sm p-sm text-error/80 hover:text-error hover:bg-error-container/10 rounded-lg transition-colors font-body-sm text-body-sm mt-auto border-t border-outline-variant/20 pt-md">
+        <button id="mobilePwaInstallBtn" onclick="installPWA()" class="hidden items-center gap-sm p-sm text-secondary hover:text-white hover:bg-secondary/20 rounded-lg transition-all font-body-sm text-body-sm group text-left w-full border border-secondary/30 mt-auto mb-xs">
+            <span class="material-symbols-outlined text-secondary group-hover:scale-110 transition-transform">download_for_offline</span>
+            Install Native App
+        </button>
+        <a href="{{ url_for('logout') }}" class="flex items-center gap-sm p-sm text-error/80 hover:text-error hover:bg-error-container/10 rounded-lg transition-colors font-body-sm text-body-sm border-t border-outline-variant/20 pt-md">
             <span class="material-symbols-outlined">logout</span> Sign Out
         </a>
     </nav>
@@ -378,7 +397,53 @@
         document.getElementById('drawerOverlay').classList.toggle('open');
         document.body.style.overflow = document.getElementById('mobileDrawer').classList.contains('open') ? 'hidden' : '';
     }
+
+    // PWA Service Worker Registration & Deferred Install Prompt
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        const btn = document.getElementById('pwaInstallBtn');
+        const mBtn = document.getElementById('mobilePwaInstallBtn');
+        if (btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); }
+        if (mBtn) { mBtn.classList.remove('hidden'); mBtn.classList.add('flex'); }
+    });
+
+    window.addEventListener('appinstalled', () => {
+        deferredPrompt = null;
+        const btn = document.getElementById('pwaInstallBtn');
+        const mBtn = document.getElementById('mobilePwaInstallBtn');
+        if (btn) { btn.classList.add('hidden'); btn.classList.remove('flex'); }
+        if (mBtn) { mBtn.classList.add('hidden'); mBtn.classList.remove('flex'); }
+        console.log('[PWA] Stock Sentinel installed successfully.');
+    });
+
+    async function installPWA() {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log('[PWA] User install choice:', outcome);
+            deferredPrompt = null;
+            const btn = document.getElementById('pwaInstallBtn');
+            const mBtn = document.getElementById('mobilePwaInstallBtn');
+            if (btn) { btn.classList.add('hidden'); btn.classList.remove('flex'); }
+            if (mBtn) { mBtn.classList.add('hidden'); mBtn.classList.remove('flex'); }
+        }
+    }
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .then((registration) => {
+                    console.log('[PWA] Service Worker registered with scope:', registration.scope);
+                })
+                .catch((err) => {
+                    console.warn('[PWA] Service Worker registration failed:', err);
+                });
+        });
+    }
     </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>
+

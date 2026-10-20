@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -9,6 +9,7 @@ from scheduler import start_scheduler, stop_scheduler
 from app.config import settings
 from app.session import StockSentinelSessionMiddleware, flash
 from app.dependencies import LoginRequiredException, CSRFValidationException
+from app.templates_config import render_template
 
 from app.routers.auth import router as auth_router
 from app.routers.dashboard import router as dashboard_router
@@ -85,6 +86,30 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 # Mount static assets
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Progressive Web App (PWA) Core Routes
+@app.get("/manifest.webmanifest", include_in_schema=False)
+async def pwa_manifest():
+    return FileResponse(
+        "static/manifest.webmanifest",
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
+
+@app.get("/sw.js", include_in_schema=False)
+async def pwa_service_worker():
+    return FileResponse(
+        "static/sw.js",
+        media_type="application/javascript",
+        headers={
+            "Service-Worker-Allowed": "/",
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+        }
+    )
+
+@app.get("/offline", name="offline", include_in_schema=False)
+async def pwa_offline(request: Request):
+    return render_template("offline.html", request)
 
 # Middlewares (Security & Performance outermost, then Compression & Session)
 app.add_middleware(SecurityHeadersMiddleware)

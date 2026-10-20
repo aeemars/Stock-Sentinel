@@ -1,0 +1,74 @@
+{
+  "name": "Stock Sentinel — Portfolio & Market Intelligence",
+  "short_name": "Stock Sentinel",
+  "description": "Real-time stock portfolio tracker, technical analysis, and intelligent market alerts.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#10131a",
+  "theme_color": "#10131a",
+  "categories": ["finance", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "View live market watchlist and portfolio overview",
+      "url": "/dashboard",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Portfolios",
+      "short_name": "Portfolios",
+      "description": "Manage your stock holdings and performance",
+      "url": "/portfolio/",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Price Alerts",
+      "short_name": "Alerts",
+      "description": "Configure intelligent stock price and volume alerts",
+      "url": "/alerts",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Technical Analytics",
+      "short_name": "Analytics",
+      "description": "Explore technical indicators and charts",
+      "url": "/analytics",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
