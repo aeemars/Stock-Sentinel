@@ -1,0 +1,14 @@
+{
+  "name": "stock-sentinel-frontend",
+  "version": "1.0.0",
+  "description": "Stock Sentinel Cloudflare Workers Edge Gateway & PWA Assets",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.114.0"
+  }
+}

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     ENVIRONMENT: Optional[str] = None
+    RENDER: Optional[str] = None
     VERCEL: Optional[str] = None
     CLOUDFLARE: Optional[str] = None
 
@@ -48,14 +49,19 @@ class Settings(BaseSettings):
 
     @property
     def is_serverless(self) -> bool:
-        """True when running in a serverless environment (Vercel, Cloudflare, etc.) where cron triggers are externally managed."""
+        """True when running in a serverless environment (Cloudflare, etc.) where cron triggers are externally managed."""
         return bool(
-            self.ENVIRONMENT in ('vercel', 'cloudflare', 'serverless')
-            or self.VERCEL
-            or os.getenv('VERCEL')
+            self.ENVIRONMENT in ('cloudflare', 'serverless', 'vercel')
             or self.CLOUDFLARE
             or os.getenv('CLOUDFLARE')
+            or self.VERCEL
+            or os.getenv('VERCEL')
         )
+
+    @property
+    def is_render(self) -> bool:
+        """True when running on Render."""
+        return bool(self.RENDER or os.getenv('RENDER') or self.ENVIRONMENT == 'render')
 
     @property
     def is_vercel(self) -> bool:

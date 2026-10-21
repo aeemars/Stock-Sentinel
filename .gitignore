@@ -1,9 +1,22 @@
 __pycache__/
+*.pyc
 .venv/
+venv/
 .env
+.env.*
+backend/.env
+backend/.env.*
 stocks.db
+*.db
 todo.md
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
-.gitignore
+
+# Cloudflare & Node
+node_modules/
+.wrangler/
+dist/
+
+# Pytest & Cache
+.pytest_cache/

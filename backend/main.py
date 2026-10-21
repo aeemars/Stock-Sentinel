@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
             raise exc
 
 
-    # Start background scheduler if not in serverless environment (Vercel, Cloudflare, etc.)
+    # Start background scheduler if not in serverless environment (Cloudflare edge proxy, etc.)
     scheduler = None
     if not settings.is_serverless:
         try:
