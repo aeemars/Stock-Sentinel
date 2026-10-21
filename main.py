@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse, FileResponse, Response
+from fastapi.responses import RedirectResponse, FileResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -141,7 +141,7 @@ app.add_middleware(StockSentinelSessionMiddleware)
 # Exception handlers matching Flask application behavior
 @app.exception_handler(LoginRequiredException)
 async def login_required_handler(request: Request, exc: LoginRequiredException):
-    return RedirectResponse(url=str(request.url_for("login")), status_code=303)
+    return RedirectResponse(url="/login", status_code=303)
 
 @app.exception_handler(CSRFValidationException)
 async def csrf_validation_handler(request: Request, exc: CSRFValidationException):
@@ -149,17 +149,18 @@ async def csrf_validation_handler(request: Request, exc: CSRFValidationException
 
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc: StarletteHTTPException):
-    # API endpoints receive standard 404; browser views redirect to dashboard
+    # API endpoints receive standard 404 JSON; browser views redirect to dashboard
     if request.url.path.startswith("/api/"):
-        return None
-    return RedirectResponse(url=str(request.url_for("dashboard")), status_code=303)
+        detail = getattr(exc, "detail", "Not Found")
+        return JSONResponse(status_code=404, content={"detail": detail})
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc: Exception):
     if request.url.path.startswith("/api/"):
-        return None
+        return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
     flash(request, "An internal error occurred", "error")
-    return RedirectResponse(url=str(request.url_for("dashboard")), status_code=303)
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 # Include route modules
 app.include_router(auth_router)
