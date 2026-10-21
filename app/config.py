@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     ENVIRONMENT: Optional[str] = None
     VERCEL: Optional[str] = None
+    CLOUDFLARE: Optional[str] = None
 
     # Session & Security
     SESSION_COOKIE_SECURE: Optional[bool] = None
@@ -46,7 +47,18 @@ class Settings(BaseSettings):
         )
 
     @property
+    def is_serverless(self) -> bool:
+        """True when running in a serverless environment (Vercel, Cloudflare, etc.) where cron triggers are externally managed."""
+        return bool(
+            self.ENVIRONMENT in ('vercel', 'cloudflare', 'serverless')
+            or self.VERCEL
+            or os.getenv('VERCEL')
+            or self.CLOUDFLARE
+            or os.getenv('CLOUDFLARE')
+        )
+
+    @property
     def is_vercel(self) -> bool:
-        return bool(self.ENVIRONMENT == 'vercel' or self.VERCEL or os.getenv('VERCEL'))
+        return self.is_serverless
 
 settings = Settings()

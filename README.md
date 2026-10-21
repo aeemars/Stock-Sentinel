@@ -60,16 +60,14 @@ app/
   dependencies.py   Auth & CSRF dependencies
   services/
     ai.py           OpenRouter AI intelligence engine & prompt constructor
-    cache.py        Tier-1 in-memory caching
+    cache.py        Tier-1 in-memory & Memcached caching
     market.py       Market data & price synchronization
+    workflow.py     Automated AI analysis pipeline orchestration
   routers/          Modular route handlers (auth, dashboard, portfolios, holdings, alerts, analytics, api)
 db.py               PostgreSQL schema + connection pool + get_db dependency
 scheduler.py        APScheduler cron job
-roma/
-  agents.py         PriceAgent (yfinance)
-  workflow.py       Orchestrates the AI analysis pipeline
 templates/          Jinja2 pages (dashboard, portfolio, alerts, analytics, etc.)
-static/             Favicon and assets
+static/             Favicon, PWA icons, manifest, and assets
 ```
 
 ## Environment Variables

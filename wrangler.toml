@@ -1,0 +1,42 @@
+# ==============================================================================
+# Stock Sentinel — Cloudflare Workers Configuration
+# ==============================================================================
+name = "stock-sentinel"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ------------------------------------------------------------------------------
+# Cloudflare Workers Static Assets
+# Serves static files directly from Cloudflare's global edge network
+# ------------------------------------------------------------------------------
+[assets]
+directory = "./static"
+binding = "ASSETS"
+
+# ------------------------------------------------------------------------------
+# Scheduled Cron Triggers
+# Automatically runs the Stock Sentinel market close intelligence scan
+# Triggers Monday through Friday at 20:30 UTC (4:30 PM EST market close + buffer)
+# ------------------------------------------------------------------------------
+[triggers]
+crons = ["30 20 * * 1-5"]
+
+# ------------------------------------------------------------------------------
+# Environment Variables (Public / Non-sensitive)
+# ------------------------------------------------------------------------------
+[vars]
+ENVIRONMENT = "cloudflare"
+# Set this to your FastAPI origin (e.g. Render, Railway, Fly.io, or Cloudflare Tunnel)
+BACKEND_ORIGIN = "https://your-backend-domain.com"
+MARKET_CLOSE_HOUR = "16"
+MARKET_CLOSE_MINUTE = "30"
+
+# ------------------------------------------------------------------------------
+# Secrets (DO NOT put secrets here — set them via CLI or Cloudflare Dashboard)
+# Run these commands to register your secrets securely in Cloudflare:
+#   npx wrangler secret put CRON_SECRET
+#   npx wrangler secret put SECRET_KEY
+#   npx wrangler secret put NEON_DATABASE_URL
+#   npx wrangler secret put OPENROUTER_API_KEY
+# ------------------------------------------------------------------------------

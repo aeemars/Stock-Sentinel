@@ -215,8 +215,8 @@ def test_email_simulation_fallback(monkeypatch):
         username="testdev",
         user_email="testdev@example.com",
         category="question",
-        subject="How does ROMA work?",
-        message="Tell me more about ROMA multi-agent system",
+        subject="How does the AI workflow work?",
+        message="Tell me more about the automated AI market intelligence pipeline",
     )
     assert result["status"] == "success"
     assert result.get("simulated") is True
@@ -436,6 +436,38 @@ def test_pwa_meta_tags_in_templates():
     assert 'name="apple-mobile-web-app-capable" content="yes"' in resp.text
     assert 'name="theme-color" content="#10131a"' in resp.text
     assert 'sw.js' in resp.text
+
+
+def test_cloudflare_environment_settings():
+    from app.config import Settings
+    s_default = Settings(ENVIRONMENT="local_test", VERCEL=None, CLOUDFLARE=None)
+    assert s_default.is_serverless is False
+
+    s_cf1 = Settings(ENVIRONMENT="cloudflare")
+    assert s_cf1.is_serverless is True
+    assert s_cf1.is_vercel is True
+
+    s_cf2 = Settings(CLOUDFLARE="1")
+    assert s_cf2.is_serverless is True
+
+
+def test_cloudflare_https_cookie_detection():
+    from app.config import settings
+    orig_secure = settings.SESSION_COOKIE_SECURE
+    orig_env = settings.ENVIRONMENT
+    client.cookies.clear()
+    try:
+        settings.SESSION_COOKIE_SECURE = None
+        settings.ENVIRONMENT = "production"
+        resp = client.get("/login", headers={"cf-visitor": '{"scheme":"https"}'})
+        assert resp.status_code == 200
+        cookie_header = resp.headers.get("set-cookie", "")
+        assert "Secure" in cookie_header or "secure" in cookie_header
+    finally:
+        client.cookies.clear()
+        settings.SESSION_COOKIE_SECURE = orig_secure
+        settings.ENVIRONMENT = orig_env
+
 
 
 

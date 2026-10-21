@@ -355,7 +355,7 @@ def analyze_portfolio_ai(
     cache.delete(f"data:user:{current_user.id}:dashboard")
 
     try:
-        from roma.workflow import run_root_workflow
+        from app.services.workflow import run_root_workflow
         run_root_workflow(portfolio_id=portfolio_id)
         flash(request, f"AI analysis completed for {portfolio['name']}! Diagnostic alerts updated.", "success")
     except Exception as e:

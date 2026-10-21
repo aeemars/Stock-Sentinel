@@ -2,7 +2,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime
 from app.config import settings
-from roma.workflow import run_root_workflow
+from app.services.workflow import run_root_workflow
+
 
 _scheduler = None
 

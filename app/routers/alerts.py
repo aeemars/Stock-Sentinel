@@ -113,8 +113,9 @@ def scan_alerts_ai(
     conn=Depends(get_db)
 ):
     try:
-        from roma.workflow import run_root_workflow
+        from app.services.workflow import run_root_workflow
         from app.services.cache import cache
+
 
         run_root_workflow(user_id=current_user.id)
         cache.delete(f"data:user:{current_user.id}:dashboard")

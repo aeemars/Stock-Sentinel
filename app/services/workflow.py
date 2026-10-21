@@ -1,27 +1,24 @@
-"""Stock Sentinel AI analysis workflow.
+"""Stock Sentinel automated AI analysis workflow.
 
-Orchestrates the analysis pipeline: fetches price data for each holding,
-computes metrics, and calls the OpenRouter AI service (or rule-based
-simulation) to produce structured alerts stored in the database.
+Orchestrates the analysis pipeline: fetches holdings for portfolios,
+evaluates metrics, and invokes the OpenRouter AI service (or rule-based simulation)
+to generate and persist actionable structured alerts in the database.
 """
 
-from .agents import PriceAgent
-from db import get_db_connection, put_db_connection
-from psycopg2.extras import RealDictCursor
-from app.services.ai import analyze_holdings, format_analysis_as_alert
 import logging
+from psycopg2.extras import RealDictCursor
+
+from db import get_db_connection, put_db_connection
+from app.services.ai import analyze_holdings, format_analysis_as_alert
 
 logger = logging.getLogger(__name__)
 
-price_agent = PriceAgent()
 
+def run_root_workflow(portfolio_id=None, user_id=None) -> bool:
+    """Run the AI analysis workflow for all holdings (or a specific portfolio / user).
 
-def run_root_workflow(portfolio_id=None, user_id=None):
-    """Run the AI analysis workflow for all holdings (or a single portfolio / user).
-
-    For each holding, fetches recent price data and computes metrics, then
-    sends the batch to the OpenRouter AI service for analysis. Results are
-    stored as alerts in the database.
+    Fetches current holding records, runs structured LLM evaluation via OpenRouter,
+    and commits generated alerts to the database.
     """
     conn = get_db_connection()
     try:
@@ -90,7 +87,8 @@ def run_root_workflow(portfolio_id=None, user_id=None):
 
     except Exception as e:
         conn.rollback()
-        logger.error(f"[Workflow] Error: {e}")
+        logger.error(f"[Workflow] Error executing workflow: {e}")
+        return False
     finally:
         put_db_connection(conn)
 

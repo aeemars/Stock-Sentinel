@@ -35,9 +35,9 @@ async def lifespan(app: FastAPI):
         print("=" * 60 + "\n")
         raise exc
 
-    # Start background scheduler if not in serverless environment
+    # Start background scheduler if not in serverless environment (Vercel, Cloudflare, etc.)
     scheduler = None
-    if not settings.is_vercel:
+    if not settings.is_serverless:
         try:
             scheduler = start_scheduler()
         except Exception as exc:

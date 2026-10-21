@@ -1,0 +1,17 @@
+# Docker build exclusions
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+tests
+.git
+.gitignore
+.github
+.env
+.env.local
+node_modules
+*.md
+!README.md

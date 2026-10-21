@@ -77,10 +77,11 @@ class StockSentinelSessionMiddleware(BaseHTTPMiddleware):
                 request.url.scheme == "https"
                 or request.headers.get("x-forwarded-proto") == "https"
                 or request.headers.get("x-forwarded-ssl") == "on"
+                or "https" in request.headers.get("cf-visitor", "")
             )
             is_secure = (
                 settings.SESSION_COOKIE_SECURE is True
-                or (settings.SESSION_COOKIE_SECURE is None and (settings.is_vercel or is_https))
+                or (settings.SESSION_COOKIE_SECURE is None and (settings.is_serverless or is_https))
             )
             response.set_cookie(
                 key=SESSION_COOKIE_NAME,

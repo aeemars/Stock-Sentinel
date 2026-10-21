@@ -1,4 +1,4 @@
-from roma.agents import PriceAgent
+from app.services.market import PriceAgent
 import pandas as pd
 
 def test_price_fetch(monkeypatch):
@@ -8,7 +8,7 @@ def test_price_fetch(monkeypatch):
             'Close': [100.0, 101.5],
         })
 
-    monkeypatch.setattr('roma.agents.yf.download', fake_download)
+    monkeypatch.setattr('app.services.market.yf.download', fake_download)
     pa = PriceAgent()
     df = pa.fetch('AAPL', period='5d')
     assert df is not None

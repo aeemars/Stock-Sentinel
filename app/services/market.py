@@ -380,3 +380,19 @@ def dispatch_background_sync(target_func, *args):
     thread.start()
 
 
+def fetch_price_history(ticker: str, period: str = '7d', interval: str = '1d'):
+    """Fetch recent price history dataframe for a ticker."""
+    df = yf.download(ticker, period=period, interval=interval, progress=False, multi_level_index=False)
+    if df is None or df.empty:
+        return None
+    df = df.reset_index()[['Date', 'Close']].rename(columns={'Date': 'ds', 'Close': 'y'})
+    return df
+
+
+class PriceAgent:
+    """Historical price fetcher service."""
+    def fetch(self, ticker: str, period: str = '7d', interval: str = '1d'):
+        return fetch_price_history(ticker, period=period, interval=interval)
+
+
+
