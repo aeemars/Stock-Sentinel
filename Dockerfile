@@ -36,12 +36,14 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Copy application codebase
 COPY . .
 
-# Expose standard FastAPI port
-EXPOSE 5000
+# Expose standard ports (5000 default, 8000 for standard PaaS containers)
+ENV PORT=5000
+EXPOSE 5000 8000
 
-# Healthcheck endpoint
+# Healthcheck endpoint (respects dynamic PORT)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5000/offline || exit 1
+  CMD curl -f http://localhost:${PORT:-5000}/offline || exit 1
 
-# Start Uvicorn ASGI server bound to all interfaces
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "2"]
+# Start Uvicorn ASGI server respecting dynamic cloud $PORT
+CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-5000} --workers 2
+

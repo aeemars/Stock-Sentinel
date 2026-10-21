@@ -1,0 +1,8 @@
+# Override GitHub Linguist language detection
+# HTML templates and static assets are excluded from language statistics so repository is identified as Python
+templates/** linguist-detectable=false
+static/** linguist-detectable=false
+*.html linguist-detectable=false
+*.svg linguist-detectable=false
+*.webmanifest linguist-detectable=false
+*.json linguist-detectable=false
