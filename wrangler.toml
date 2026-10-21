@@ -28,7 +28,7 @@ crons = ["30 20 * * 1-5"]
 [vars]
 ENVIRONMENT = "cloudflare"
 # Set this to your FastAPI origin (e.g. Render, Railway, Fly.io, or Cloudflare Tunnel)
-BACKEND_ORIGIN = "https://your-backend-domain.com"
+BACKEND_ORIGIN = "https://stock-sentinel-theta.vercel.app/"
 MARKET_CLOSE_HOUR = "16"
 MARKET_CLOSE_MINUTE = "30"
 

@@ -81,22 +81,36 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         return response
 
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+
 # Mount static assets
-app.mount("/static", StaticFiles(directory="static"), name="static")
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+else:
+    try:
+        app.mount("/static", StaticFiles(directory="static"), name="static")
+    except Exception:
+        pass
 
 # Progressive Web App (PWA) Core Routes
 @app.get("/manifest.webmanifest", include_in_schema=False)
 async def pwa_manifest():
+    manifest_file = STATIC_DIR / "manifest.webmanifest"
+    target = str(manifest_file) if manifest_file.exists() else "static/manifest.webmanifest"
     return FileResponse(
-        "static/manifest.webmanifest",
+        target,
         media_type="application/manifest+json",
         headers={"Cache-Control": "public, max-age=86400"}
     )
 
 @app.get("/sw.js", include_in_schema=False)
 async def pwa_service_worker():
+    sw_file = STATIC_DIR / "sw.js"
+    target = str(sw_file) if sw_file.exists() else "static/sw.js"
     return FileResponse(
-        "static/sw.js",
+        target,
         media_type="application/javascript",
         headers={
             "Service-Worker-Allowed": "/",

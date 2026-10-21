@@ -7,7 +7,12 @@ from starlette.responses import Response
 from app.session import get_flashed_messages
 from app.auth import AnonymousUser
 
-templates = Jinja2Templates(directory="templates")
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+TEMPLATES_DIR = BASE_DIR / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR) if TEMPLATES_DIR.exists() else "templates")
+
 
 @jinja2.pass_context
 def jinja_csrf_token(context: jinja2.runtime.Context) -> str:
