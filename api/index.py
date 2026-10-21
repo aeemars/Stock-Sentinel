@@ -54,7 +54,7 @@ class VercelPathRewriteASGIApp:
                     ]
                     scope["query_string"] = "&".join(filtered_qs).encode("utf-8")
 
-                if target_path and target_path not in ("/api/index.py", "/api/index"):
+                if target_path and target_path not in ("/api/index.py", "/api/index", "/api", "/api/"):
                     scope["path"] = target_path
                 else:
                     scope["path"] = "/"
