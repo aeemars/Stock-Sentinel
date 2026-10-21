@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.responses import RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -116,6 +116,16 @@ async def pwa_service_worker():
             "Service-Worker-Allowed": "/",
             "Cache-Control": "no-cache, no-store, must-revalidate"
         }
+    )
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    fav_file = STATIC_DIR / "favicon.svg"
+    target = str(fav_file) if fav_file.exists() else "static/favicon.svg"
+    return FileResponse(
+        target,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"}
     )
 
 @app.get("/offline", name="offline", include_in_schema=False)
