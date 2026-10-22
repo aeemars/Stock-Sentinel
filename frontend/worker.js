@@ -146,7 +146,7 @@ export default {
   /**
    * Handle scheduled Cron Triggers:
    * 1. Market Close Scan: "30 20 * * 1-5" (Mon-Fri at 20:30 UTC) -> POST /api/run-workflow
-   * 2. Render Keep-Alive: "*/14 * * * *" (Every 14m, 24/7) -> GET /health
+   * 2. Render Keep-Alive: every 14 mins (Active Hours) -> GET /health
    */
   async scheduled(event, env, ctx) {
     const origin = env.BACKEND_ORIGIN;
