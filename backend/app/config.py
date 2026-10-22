@@ -1,9 +1,21 @@
 import os
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
 from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).resolve().parent.parent  # backend directory
+ROOT_DIR = BASE_DIR.parent                        # project root directory
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
+    model_config = SettingsConfigDict(
+        env_file=(
+            str(BASE_DIR / '.env'),
+            str(ROOT_DIR / '.env'),
+            '.env'
+        ),
+        env_file_encoding='utf-8',
+        extra='ignore'
+    )
 
     DATABASE_URL: Optional[str] = None
     NEON_DATABASE_URL: Optional[str] = None
