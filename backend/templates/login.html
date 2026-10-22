@@ -139,9 +139,18 @@
                 </div>
                 <div class="flex flex-col gap-xs">
                     <label class="font-label-caps text-label-caps text-on-surface-variant uppercase">Password</label>
-                    <input name="password" type="password" required
-                           class="w-full bg-surface-container-high border border-outline-variant/50 rounded-lg px-sm py-sm text-on-surface font-body-sm text-body-sm input-glow outline-none transition-shadow"
-                           placeholder="••••••••"/>
+                    <div class="relative w-full">
+                        <input id="login-password" name="password" type="password" required
+                               class="w-full bg-surface-container-high border border-outline-variant/50 rounded-lg pl-sm pr-11 py-sm text-on-surface font-body-sm text-body-sm input-glow outline-none transition-shadow"
+                               placeholder="••••••••"/>
+                        <button type="button"
+                                onclick="togglePasswordVisibility('login-password', this)"
+                                class="absolute right-0 top-0 bottom-0 px-3 flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors focus:outline-none"
+                                aria-label="Show password"
+                                title="Show password">
+                            <span class="material-symbols-outlined text-[20px] select-none">visibility</span>
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="w-full py-sm rounded-lg bg-primary text-on-primary font-body-sm font-bold hover:bg-primary-container transition-colors shadow-[0_0_20px_rgba(173,198,255,0.15)] min-h-[48px]">
                     Sign In
@@ -157,6 +166,23 @@
         </div>
     </div>
     <script>
+    function togglePasswordVisibility(inputId, btn) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        const icon = btn.querySelector('.material-symbols-outlined');
+        if (input.type === 'password') {
+            input.type = 'text';
+            if (icon) icon.textContent = 'visibility_off';
+            btn.setAttribute('aria-label', 'Hide password');
+            btn.setAttribute('title', 'Hide password');
+        } else {
+            input.type = 'password';
+            if (icon) icon.textContent = 'visibility';
+            btn.setAttribute('aria-label', 'Show password');
+            btn.setAttribute('title', 'Show password');
+        }
+    }
+
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('/sw.js', { scope: '/' })
