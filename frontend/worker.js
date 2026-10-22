@@ -144,42 +144,66 @@ export default {
   },
 
   /**
-   * Handle scheduled Cron Triggers (market close scan at 20:30 UTC Mon-Fri)
+   * Handle scheduled Cron Triggers:
+   * 1. Market Close Scan: "30 20 * * 1-5" (Mon-Fri at 20:30 UTC) -> POST /api/run-workflow
+   * 2. Render Keep-Alive: "*/14 * * * *" (Every 14m, 24/7) -> GET /health
    */
   async scheduled(event, env, ctx) {
-    console.log(`[Cloudflare Cron] Scheduled trigger fired at ${new Date(event.scheduledTime).toISOString()}`);
-
     const origin = env.BACKEND_ORIGIN;
     if (!origin) {
       console.error('[Cloudflare Cron] BACKEND_ORIGIN environment variable is not defined.');
       return;
     }
 
-    const workflowUrl = `${origin.replace(/\/+$/, '')}/api/run-workflow`;
-    const cronSecret = env.CRON_SECRET;
+    const cleanOrigin = origin.replace(/\/+$/, '');
 
-    const headers = {
-      'Content-Type': 'application/json',
-      'X-Triggered-By': 'Cloudflare-Worker-Cron',
-      'User-Agent': 'Cloudflare-Worker-Cron/1.0'
-    };
+    // Branch based on the firing cron trigger pattern
+    if (event.cron === "30 20 * * 1-5") {
+      console.log(`[Cloudflare Cron] Market close workflow trigger fired at ${new Date(event.scheduledTime).toISOString()}`);
+      const workflowUrl = `${cleanOrigin}/api/run-workflow`;
+      const cronSecret = env.CRON_SECRET;
 
-    if (cronSecret) {
-      headers['Authorization'] = `Bearer ${cronSecret}`;
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Triggered-By': 'Cloudflare-Worker-Cron',
+        'User-Agent': 'Cloudflare-Worker-Cron/1.0'
+      };
+
+      if (cronSecret) {
+        headers['Authorization'] = `Bearer ${cronSecret}`;
+      }
+
+      ctx.waitUntil(
+        fetch(workflowUrl, {
+          method: 'POST',
+          headers
+        })
+        .then(async (res) => {
+          const text = await res.text();
+          console.log(`[Cloudflare Cron] Run-workflow HTTP ${res.status}: ${text.slice(0, 200)}`);
+        })
+        .catch((err) => {
+          console.error('[Cloudflare Cron] Error invoking /api/run-workflow:', err);
+        })
+      );
+    } else {
+      // Keep-Alive Ping (fires every 14 minutes to prevent Render free instance spin down)
+      const healthUrl = `${cleanOrigin}/health`;
+      ctx.waitUntil(
+        fetch(healthUrl, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'StockSentinel-KeepAlive/1.0',
+            'X-Purpose': 'Render-KeepAlive'
+          }
+        })
+        .then(async (res) => {
+          console.log(`[KeepAlive] Pinged Render /health at ${new Date().toISOString()} - HTTP ${res.status}`);
+        })
+        .catch((err) => {
+          console.warn('[KeepAlive] Warning: Failed to ping Render /health:', err.message || err);
+        })
+      );
     }
-
-    ctx.waitUntil(
-      fetch(workflowUrl, {
-        method: 'POST',
-        headers
-      })
-      .then(async (res) => {
-        const text = await res.text();
-        console.log(`[Cloudflare Cron] Run-workflow HTTP ${res.status}: ${text.slice(0, 200)}`);
-      })
-      .catch((err) => {
-        console.error('[Cloudflare Cron] Error invoking /api/run-workflow:', err);
-      })
-    );
   }
 };

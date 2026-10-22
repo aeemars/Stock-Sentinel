@@ -16,11 +16,15 @@ binding = "ASSETS"
 
 # ------------------------------------------------------------------------------
 # Scheduled Cron Triggers
-# Automatically runs the Stock Sentinel market close intelligence scan
-# Triggers Monday through Friday at 20:30 UTC (4:30 PM EST market close + buffer)
+# 1. Market Close Scan: Monday through Friday at 20:30 UTC (4:30 PM EST market close + buffer)
+# 2. Keep-Alive Ping: Every 14 minutes during active hours (07:00–22:00 UTC / 8 AM–11 PM WAT)
+#    Saves ~285 free hours/month so you never exceed Render's 750h quota.
 # ------------------------------------------------------------------------------
 [triggers]
-crons = ["30 20 * * 1-5"]
+crons = [
+  "30 20 * * 1-5",
+  "*/14 7-21 * * *"
+]
 
 # ------------------------------------------------------------------------------
 # Environment Variables (Public / Non-sensitive)

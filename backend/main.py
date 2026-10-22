@@ -128,6 +128,11 @@ async def favicon():
         headers={"Cache-Control": "public, max-age=86400"}
     )
 
+@app.get("/health", include_in_schema=False)
+@app.get("/api/health", include_in_schema=False)
+async def health_check():
+    return {"status": "ok", "app": "Stock Sentinel Backend"}
+
 @app.get("/offline", name="offline", include_in_schema=False)
 async def pwa_offline(request: Request):
     return render_template("offline.html", request)
