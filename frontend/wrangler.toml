@@ -28,7 +28,7 @@ crons = ["30 20 * * 1-5"]
 [vars]
 ENVIRONMENT = "cloudflare"
 # Set this to your FastAPI origin on Render (e.g. https://stock-sentinel.onrender.com)
-BACKEND_ORIGIN = "https://stock-sentinel.onrender.com"
+BACKEND_ORIGIN = "https://stock-sentinel-zcrs.onrender.com"
 MARKET_CLOSE_HOUR = "16"
 MARKET_CLOSE_MINUTE = "30"
 
