@@ -85,21 +85,24 @@ def fetch_kobo_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Opti
 
     from app.config import Settings
     settings = Settings()
-    api_key = settings.KOBO_TERMINAL_API_KEY
-    base_url = (settings.KOBO_TERMINAL_BASE_URL or "https://koboterminal.com/api").rstrip("/")
+    api_key = settings.effective_kobo_api_key
+    base_url = (settings.KOBO_TERMINAL_BASE_URL or "https://koboterminal.com").rstrip("/")
 
     headers = {
         "Accept": "application/json",
+        "Content-Type": "application/json",
         "User-Agent": "Stock-Sentinel/1.0",
     }
     if api_key:
         headers["X-API-Key"] = api_key
         headers["Authorization"] = f"Bearer {api_key}"
 
+    # Official Kobo Terminal NGX endpoint: /api/ngxdata/prices/:symbol
     endpoints = [
+        f"{base_url}/api/ngxdata/prices/{symbol}",
+        f"{base_url}/api/ngxdata/fundamentals/{symbol}",
+        f"{base_url}/api/stocks/{symbol}",
         f"{base_url}/stocks/{symbol}",
-        f"{base_url}/quotes/{symbol}",
-        f"{base_url}/ticker/{symbol}",
     ]
 
     price = None
@@ -114,7 +117,7 @@ def fetch_kobo_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Opti
                         candidate = None
                         if isinstance(data, dict):
                             inner = data.get("data") if isinstance(data.get("data"), dict) else data
-                            for key in ("price", "last_price", "regularMarketPrice", "close", "current_price", "last"):
+                            for key in ("current_price", "price", "last_price", "regularMarketPrice", "close", "last"):
                                 val = inner.get(key)
                                 if val is not None:
                                     try:

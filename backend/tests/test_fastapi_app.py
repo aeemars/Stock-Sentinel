@@ -498,18 +498,32 @@ def test_fetch_kobo_ticker_price_mock(monkeypatch):
 
     mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = {"symbol": "DANGCEM", "price": 285.50}
+    # Official Kobo Terminal JSON payload structure
+    mock_resp.json.return_value = {
+        "symbol": "DANGCEM",
+        "name": "Dangote Cement Plc",
+        "current_price": 665.00,
+        "change_percent": 2.31,
+        "volume": 1245890
+    }
 
     mock_client = MagicMock()
     mock_client.__enter__.return_value = mock_client
     mock_client.get.return_value = mock_resp
 
     monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+    monkeypatch.setenv("X-API-KEY", "kobo_test_key_123")
 
     price = fetch_kobo_ticker_price("DANGCEM.NG", ttl=0)
-    assert price == 285.50
-    assert get_cached_price("DANGCEM.NG") == 285.50
-    assert get_cached_price("DANGCEM") == 285.50
+    assert price == 665.00
+    assert get_cached_price("DANGCEM.NG") == 665.00
+    assert get_cached_price("DANGCEM") == 665.00
+
+    # Verify official endpoint was called with X-API-Key header
+    called_url = mock_client.get.call_args[0][0]
+    called_headers = mock_client.get.call_args[1]["headers"]
+    assert "/api/ngxdata/prices/DANGCEM" in called_url
+    assert called_headers["X-API-Key"] == "kobo_test_key_123"
 
 
 def test_fetch_single_ticker_price_routing(monkeypatch):
@@ -523,6 +537,13 @@ def test_fetch_single_ticker_price_routing(monkeypatch):
     p_ngx = market_mod.fetch_single_ticker_price("MTNN.NG", ttl=0)
     assert p_ngx == 290.0
     kobo_mock.assert_called_once()
+
+
+def test_x_api_key_settings_resolution(monkeypatch):
+    from app.config import Settings
+    monkeypatch.setenv("X-API-KEY", "secret_kobo_key_456")
+    s = Settings()
+    assert s.effective_kobo_api_key == "secret_kobo_key_456"
 
 
 
