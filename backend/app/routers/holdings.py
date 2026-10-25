@@ -5,13 +5,13 @@ from fastapi.responses import RedirectResponse
 from psycopg2.extras import RealDictCursor
 from db import get_db
 from app.services.cache import cache
-from app.services.market import fetch_single_ticker_price
+from app.services.market import fetch_single_ticker_price, get_ticker_currency, is_ngx_ticker
 from app.dependencies import get_current_user, verify_csrf
 from app.session import flash
 
 router = APIRouter(tags=["holdings"])
 
-TICKER_REGEX = re.compile(r"^[A-Z0-9.\-]{1,10}$")
+TICKER_REGEX = re.compile(r"^[A-Z0-9.\-:]{1,20}$")
 
 @router.post("/portfolio/{portfolio_id}/holding/create", name="create_holding", dependencies=[Depends(verify_csrf)], response_model=None)
 def create_holding(
@@ -20,6 +20,7 @@ def create_holding(
     ticker: str = Form(""),
     shares: str = Form(""),
     buy_price: str = Form(""),
+    currency: str = Form(""),
     current_user=Depends(get_current_user),
     conn=Depends(get_db)
 ):
@@ -32,7 +33,7 @@ def create_holding(
         return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
 
     if not TICKER_REGEX.match(ticker):
-        flash(request, "Invalid ticker symbol format. Use 1-10 alphanumeric characters (e.g. AAPL, BRK.B).", "error")
+        flash(request, "Invalid ticker symbol format. Use 1-20 alphanumeric characters (e.g. AAPL, DANGCEM.NG).", "error")
         return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
 
     try:
@@ -123,10 +124,11 @@ def create_holding(
                 ))
                 holding_id = existing_row['id']
             else:
+                resolved_currency = currency.strip().upper() if currency and currency.strip().upper() in ("USD", "NGN") else get_ticker_currency(ticker)
                 cur.execute("""
-                    INSERT INTO holdings (portfolio_id, ticker, shares, buy_price, last_price, last_price_updated_at)
-                    VALUES (%s, %s, %s, %s, %s, CASE WHEN %s IS NOT NULL THEN CURRENT_TIMESTAMP ELSE NULL END) RETURNING id
-                """, (portfolio_id, ticker, shares_delta, entry_price, market_price, market_price))
+                    INSERT INTO holdings (portfolio_id, ticker, shares, buy_price, currency, last_price, last_price_updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, CASE WHEN %s IS NOT NULL THEN CURRENT_TIMESTAMP ELSE NULL END) RETURNING id
+                """, (portfolio_id, ticker, shares_delta, entry_price, resolved_currency, market_price, market_price))
                 new_holding = cur.fetchone()
                 holding_id = new_holding['id']
 
@@ -154,7 +156,8 @@ def create_holding(
         cache.delete_by_prefix(f"data:user:{current_user.id}:")
         cache.delete(f"data:live_prices:{portfolio_id}")
 
-        price_str = f" @ ${entry_price:.2f}" if entry_price is not None else ""
+        curr_sym = "₦" if (currency.strip().upper() == "NGN" or is_ngx_ticker(ticker)) else "$"
+        price_str = f" @ {curr_sym}{entry_price:.2f}" if entry_price is not None else ""
         flash(request, f"Added {shares_val} shares of {ticker}{price_str} to portfolio", "success")
     except Exception as e:
         conn.rollback()

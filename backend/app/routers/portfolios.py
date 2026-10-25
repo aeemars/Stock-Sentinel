@@ -10,6 +10,8 @@ from app.services.market import (
     background_sync_portfolio_prices,
     calculate_holding_metrics,
     dispatch_background_sync,
+    is_ngx_ticker,
+    get_ticker_currency,
 )
 from app.session import flash
 from app.templates_config import render_template
@@ -93,14 +95,26 @@ def view_portfolio(
         needs_price_sync = False
         now_utc = datetime.now(timezone.utc)
 
+        totals_by_currency = {
+            "USD": {"cost": 0.0, "market_value": 0.0, "pnl": 0.0, "pnl_pct": 0.0, "symbol": "$"},
+            "NGN": {"cost": 0.0, "market_value": 0.0, "pnl": 0.0, "pnl_pct": 0.0, "symbol": "₦"},
+        }
+
         for holding in holdings:
             holding['history'] = snapshots_by_holding.get(holding['id'], [])
+            curr = holding.get('currency') or get_ticker_currency(holding['ticker'])
+            holding['currency'] = curr
 
             metrics = calculate_holding_metrics(holding)
             holding.update(metrics)
 
             total_cost += metrics['cost_basis']
             total_market_value += metrics['market_value']
+
+            if curr not in totals_by_currency:
+                totals_by_currency[curr] = {"cost": 0.0, "market_value": 0.0, "pnl": 0.0, "pnl_pct": 0.0, "symbol": curr}
+            totals_by_currency[curr]["cost"] += metrics["cost_basis"]
+            totals_by_currency[curr]["market_value"] += metrics["market_value"]
 
             ts = holding.get('last_price_updated_at')
             if ts:
@@ -112,6 +126,20 @@ def view_portfolio(
                     needs_price_sync = True
             else:
                 needs_price_sync = True
+
+        for c, tdata in totals_by_currency.items():
+            t_c = tdata["cost"]
+            t_m = tdata["market_value"]
+            t_pnl = round(t_m - t_c, 2) if t_c > 0 else 0.0
+            t_pnl_pct = round((t_pnl / t_c) * 100, 2) if t_c > 0 else 0.0
+            tdata["pnl"] = t_pnl
+            tdata["pnl_pct"] = t_pnl_pct
+
+        active_currencies = [c for c, d in totals_by_currency.items() if d["cost"] > 0 or d["market_value"] > 0]
+        if not active_currencies and holdings:
+            active_currencies = list({h.get("currency", "USD") for h in holdings})
+        is_mixed_currency = len(active_currencies) > 1
+        primary_currency = active_currencies[0] if len(active_currencies) == 1 else "USD"
 
         total_shares = sum(h['shares'] for h in holdings)
         unique_tickers = len(set(h['ticker'] for h in holdings))
@@ -147,6 +175,10 @@ def view_portfolio(
         "total_market_value": total_market_value,
         "total_pnl": total_pnl,
         "total_pnl_pct": total_pnl_pct,
+        "totals_by_currency": totals_by_currency,
+        "active_currencies": active_currencies,
+        "is_mixed_currency": is_mixed_currency,
+        "primary_currency": primary_currency,
         "last_updated_at": last_updated_at,
     }
     # Cache view context for 20 seconds
@@ -275,10 +307,21 @@ def get_portfolio_live_prices(
     needs_sync = False
     now_utc = datetime.now(timezone.utc)
 
+    totals_by_currency = {
+        "USD": {"cost": 0.0, "market_value": 0.0, "pnl": 0.0, "pnl_pct": 0.0, "symbol": "$"},
+        "NGN": {"cost": 0.0, "market_value": 0.0, "pnl": 0.0, "pnl_pct": 0.0, "symbol": "₦"},
+    }
+
     for h in holdings:
+        curr = h.get('currency') or get_ticker_currency(h['ticker'])
         metrics = calculate_holding_metrics(h)
         total_cost += metrics['cost_basis']
         total_market_value += metrics['market_value']
+
+        if curr not in totals_by_currency:
+            totals_by_currency[curr] = {"cost": 0.0, "market_value": 0.0, "pnl": 0.0, "pnl_pct": 0.0, "symbol": curr}
+        totals_by_currency[curr]["cost"] += metrics["cost_basis"]
+        totals_by_currency[curr]["market_value"] += metrics["market_value"]
 
         ts = h.get('last_price_updated_at')
         if ts:
@@ -293,6 +336,8 @@ def get_portfolio_live_prices(
         results.append({
             "id": h['id'],
             "ticker": h['ticker'],
+            "currency": curr,
+            "currency_symbol": "₦" if curr == "NGN" else "$",
             "shares": h['shares'],
             "buy_price": round(h['buy_price'], 2) if h.get('buy_price') is not None else None,
             "last_price": round(h['last_price'], 2) if h.get('last_price') is not None else None,
@@ -307,6 +352,20 @@ def get_portfolio_live_prices(
     if needs_sync and holdings and not force:
         dispatch_background_sync(background_sync_portfolio_prices, portfolio_id, 30)
 
+    for c, tdata in totals_by_currency.items():
+        t_c = tdata["cost"]
+        t_m = tdata["market_value"]
+        t_pnl = round(t_m - t_c, 2) if t_c > 0 else 0.0
+        t_pnl_pct = round((t_pnl / t_c) * 100, 2) if t_c > 0 else 0.0
+        tdata["pnl"] = t_pnl
+        tdata["pnl_pct"] = t_pnl_pct
+
+    active_currencies = [c for c, d in totals_by_currency.items() if d["cost"] > 0 or d["market_value"] > 0]
+    if not active_currencies and holdings:
+        active_currencies = list({h.get("currency", "USD") for h in holdings})
+    is_mixed_currency = len(active_currencies) > 1
+    primary_currency = active_currencies[0] if len(active_currencies) == 1 else "USD"
+
     total_shares = sum(h['shares'] for h in holdings)
     total_pnl = round(total_market_value - total_cost, 2) if total_cost > 0 else 0.0
     total_pnl_pct = round((total_pnl / total_cost) * 100, 2) if total_cost > 0 else 0.0
@@ -320,7 +379,10 @@ def get_portfolio_live_prices(
             "total_cost": total_cost,
             "total_market_value": total_market_value,
             "total_pnl": total_pnl,
-            "total_pnl_pct": total_pnl_pct
+            "total_pnl_pct": total_pnl_pct,
+            "totals_by_currency": totals_by_currency,
+            "is_mixed_currency": is_mixed_currency,
+            "primary_currency": primary_currency,
         },
         "holdings": results
     }

@@ -469,5 +469,61 @@ def test_cloudflare_https_cookie_detection():
         settings.ENVIRONMENT = orig_env
 
 
+def test_is_ngx_ticker_and_currency_resolution():
+    from app.services.market import (
+        is_ngx_ticker,
+        get_ticker_currency,
+        normalize_ngx_symbol,
+    )
+    assert is_ngx_ticker("DANGCEM") is True
+    assert is_ngx_ticker("MTNN.NG") is True
+    assert is_ngx_ticker("ZENITHBANK.LG") is True
+    assert is_ngx_ticker("NGX:GTCO") is True
+    assert is_ngx_ticker("AAPL") is False
+    assert is_ngx_ticker("TSLA") is False
+
+    assert get_ticker_currency("DANGCEM") == "NGN"
+    assert get_ticker_currency("DANGCEM.NG") == "NGN"
+    assert get_ticker_currency("AAPL") == "USD"
+
+    assert normalize_ngx_symbol("DANGCEM.NG") == "DANGCEM"
+    assert normalize_ngx_symbol("NGX:MTNN") == "MTNN"
+    assert normalize_ngx_symbol("ZENITHBANK.LG") == "ZENITHBANK"
+
+
+def test_fetch_kobo_ticker_price_mock(monkeypatch):
+    import httpx
+    from unittest.mock import MagicMock
+    from app.services.market import fetch_kobo_ticker_price, get_cached_price
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"symbol": "DANGCEM", "price": 285.50}
+
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.get.return_value = mock_resp
+
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    price = fetch_kobo_ticker_price("DANGCEM.NG", ttl=0)
+    assert price == 285.50
+    assert get_cached_price("DANGCEM.NG") == 285.50
+    assert get_cached_price("DANGCEM") == 285.50
+
+
+def test_fetch_single_ticker_price_routing(monkeypatch):
+    from unittest.mock import MagicMock
+    import app.services.market as market_mod
+
+    kobo_mock = MagicMock(return_value=290.0)
+    monkeypatch.setattr(market_mod, "fetch_kobo_ticker_price", kobo_mock)
+
+    # Calling NGX ticker should invoke Kobo Terminal provider
+    p_ngx = market_mod.fetch_single_ticker_price("MTNN.NG", ttl=0)
+    assert p_ngx == 290.0
+    kobo_mock.assert_called_once()
+
+
 
 

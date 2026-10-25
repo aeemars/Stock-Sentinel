@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+
+    # Kobo Terminal Nigerian Stock Market API (NGN)
+    KOBO_TERMINAL_API_KEY: Optional[str] = None
+    KOBO_TERMINAL_BASE_URL: str = "https://koboterminal.com/api"
     ENVIRONMENT: Optional[str] = None
     RENDER: Optional[str] = None
     VERCEL: Optional[str] = None

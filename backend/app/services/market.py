@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 import yfinance as yf
 from psycopg2.extras import RealDictCursor
 
@@ -12,6 +12,43 @@ logger = logging.getLogger(__name__)
 _CACHE_LOCK = threading.Lock()
 _PRICE_CACHE: Dict[str, Tuple[float, float]] = {}  # ticker -> (price, timestamp)
 DEFAULT_CACHE_TTL = 30.0  # seconds
+
+# Recognized Nigerian Exchange (NGX) equities for native Naira (NGN) resolution
+KNOWN_NGX_TICKERS: Set[str] = {
+    "MTNN", "DANGCEM", "AIRTELAFRI", "BUAFOODS", "BUACEMENT", "ZENITHBANK",
+    "GTCO", "ACCESSCORP", "UBA", "FBNH", "SEPLAT", "NESTLE", "PRESCO",
+    "OKOMUOIL", "TRANSCORP", "TRANSCORPPOWER", "GEREGU", "STANBIC", "FIDELITYBK",
+    "FCMB", "STERLINGNG", "WAPCO", "GUINNESS", "NB", "TOTAL", "CONOIL",
+    "OANDO", "FLOURMILL", "UNILEVER", "CADBURY", "JAIZBANK", "WEMABANK",
+    "CUSTODIAN", "AIICO", "MANSARD", "NAHCO", "CHAMS", "CWG", "ETRANZACT",
+    "INTBREW", "VITAFOAM", "DANGSUGAR", "NASCON", "UCAP", "NGXGROUP",
+    "CORNERST", "VERITASKAP", "SOVRENINS", "CHIPLC", "SUNUASSUR", "ROYALEX"
+}
+
+
+def is_ngx_ticker(ticker: str) -> bool:
+    """Check if a ticker represents a Nigerian Exchange (NGX) stock."""
+    if not ticker:
+        return False
+    clean = ticker.strip().upper()
+    if clean.endswith(".NG") or clean.endswith(".LG") or clean.startswith("NGX:"):
+        return True
+    return clean in KNOWN_NGX_TICKERS
+
+
+def normalize_ngx_symbol(ticker: str) -> str:
+    """Normalize NGX ticker to standard base symbol (e.g. DANGCEM.NG -> DANGCEM)."""
+    clean = ticker.strip().upper()
+    if clean.startswith("NGX:"):
+        clean = clean[4:]
+    if clean.endswith(".NG") or clean.endswith(".LG"):
+        clean = clean.rsplit(".", 1)[0]
+    return clean
+
+
+def get_ticker_currency(ticker: str) -> str:
+    """Determine currency based on symbol: NGN for Nigerian stocks, USD for others."""
+    return "NGN" if is_ngx_ticker(ticker) else "USD"
 
 
 def get_cached_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Optional[float]:
@@ -31,8 +68,11 @@ def set_cached_price(ticker: str, price: float) -> None:
         _PRICE_CACHE[ticker] = (round(float(price), 4), time.time())
 
 
-def fetch_single_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Optional[float]:
-    """Fetch current dynamic market price for a single ticker with fallback mechanisms."""
+def fetch_kobo_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Optional[float]:
+    """
+    Fetch live dynamic market price for a Nigerian stock from Kobo Terminal API.
+    Shares the same cache and provides graceful fallbacks.
+    """
     clean_ticker = ticker.strip().upper()
     if not clean_ticker:
         return None
@@ -41,6 +81,89 @@ def fetch_single_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Op
     if cached is not None:
         return cached
 
+    symbol = normalize_ngx_symbol(clean_ticker)
+
+    from app.config import Settings
+    settings = Settings()
+    api_key = settings.KOBO_TERMINAL_API_KEY
+    base_url = (settings.KOBO_TERMINAL_BASE_URL or "https://koboterminal.com/api").rstrip("/")
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "Stock-Sentinel/1.0",
+    }
+    if api_key:
+        headers["X-API-Key"] = api_key
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    endpoints = [
+        f"{base_url}/stocks/{symbol}",
+        f"{base_url}/quotes/{symbol}",
+        f"{base_url}/ticker/{symbol}",
+    ]
+
+    price = None
+    try:
+        import httpx
+        with httpx.Client(timeout=8.0) as client:
+            for url in endpoints:
+                try:
+                    resp = client.get(url, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidate = None
+                        if isinstance(data, dict):
+                            inner = data.get("data") if isinstance(data.get("data"), dict) else data
+                            for key in ("price", "last_price", "regularMarketPrice", "close", "current_price", "last"):
+                                val = inner.get(key)
+                                if val is not None:
+                                    try:
+                                        cand_val = float(val)
+                                        if cand_val > 0:
+                                            candidate = cand_val
+                                            break
+                                    except (ValueError, TypeError):
+                                        continue
+                        if candidate is not None:
+                            price = candidate
+                            break
+                    elif resp.status_code in (401, 403, 404):
+                        continue
+                except Exception as req_err:
+                    logger.debug(f"Kobo endpoint {url} attempt failed: {req_err}")
+                    continue
+    except Exception as exc:
+        logger.warning(f"Error fetching Kobo Terminal price for {symbol}: {exc}")
+
+    if price is not None and price > 0:
+        price = round(float(price), 4)
+        set_cached_price(clean_ticker, price)
+        if symbol != clean_ticker:
+            set_cached_price(symbol, price)
+            set_cached_price(f"{symbol}.NG", price)
+        return price
+
+    return None
+
+
+def fetch_single_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Optional[float]:
+    """
+    Fetch current dynamic market price for a single ticker.
+    Routes Nigerian stocks (NGN) to Kobo Terminal API and US/global stocks (USD) to YFinance.
+    """
+    clean_ticker = ticker.strip().upper()
+    if not clean_ticker:
+        return None
+
+    cached = get_cached_price(clean_ticker, ttl=ttl)
+    if cached is not None:
+        return cached
+
+    # Smart Routing: Nigerian Exchange tickers -> Kobo Terminal API
+    if is_ngx_ticker(clean_ticker):
+        return fetch_kobo_ticker_price(clean_ticker, ttl=ttl)
+
+    # Global / US Equities -> Yahoo Finance
     price = None
     try:
         t = yf.Ticker(clean_ticker)

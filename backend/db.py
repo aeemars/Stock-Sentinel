@@ -73,6 +73,7 @@ def init_db(database_url: str):
                     ticker VARCHAR(50) NOT NULL,
                     shares FLOAT NOT NULL DEFAULT 0.0,
                     buy_price FLOAT,
+                    currency VARCHAR(10) DEFAULT 'USD',
                     last_price FLOAT,
                     last_price_updated_at TIMESTAMP WITH TIME ZONE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -138,6 +139,17 @@ def init_db(database_url: str):
                     ) THEN
                         ALTER TABLE holdings ADD COLUMN buy_price FLOAT;
                         UPDATE holdings SET buy_price = last_price WHERE buy_price IS NULL AND last_price IS NOT NULL;
+                    END IF;
+                END $$;
+            """)
+            cur.execute("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'holdings' AND column_name = 'currency'
+                    ) THEN
+                        ALTER TABLE holdings ADD COLUMN currency VARCHAR(10) DEFAULT 'USD';
                     END IF;
                 END $$;
             """)
