@@ -10,6 +10,7 @@ from psycopg2.extras import RealDictCursor
 
 from db import get_db_connection, put_db_connection
 from app.services.ai import analyze_holdings, format_analysis_as_alert
+from app.services.market import get_ticker_currency
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +52,14 @@ def run_root_workflow(portfolio_id=None, user_id=None) -> bool:
                 if buy_price and last_price and buy_price > 0:
                     pnl_pct = round(((last_price - buy_price) / buy_price) * 100, 2)
 
+                currency = h.get('currency') or get_ticker_currency(ticker)
                 holdings_data.append({
                     'ticker': ticker,
                     'shares': h['shares'],
                     'buy_price': buy_price,
                     'last_price': last_price,
                     'pnl_pct': pnl_pct,
+                    'currency': currency,
                     'portfolio_id': h['portfolio_id'],
                 })
 

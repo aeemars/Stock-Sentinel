@@ -125,10 +125,11 @@ def create_holding(
                 holding_id = existing_row['id']
             else:
                 resolved_currency = currency.strip().upper() if currency and currency.strip().upper() in ("USD", "NGN") else get_ticker_currency(ticker)
+                initial_last_price = market_price if market_price is not None else entry_price
                 cur.execute("""
                     INSERT INTO holdings (portfolio_id, ticker, shares, buy_price, currency, last_price, last_price_updated_at)
                     VALUES (%s, %s, %s, %s, %s, %s, CASE WHEN %s IS NOT NULL THEN CURRENT_TIMESTAMP ELSE NULL END) RETURNING id
-                """, (portfolio_id, ticker, shares_delta, entry_price, resolved_currency, market_price, market_price))
+                """, (portfolio_id, ticker, shares_delta, entry_price, resolved_currency, initial_last_price, initial_last_price))
                 new_holding = cur.fetchone()
                 holding_id = new_holding['id']
 

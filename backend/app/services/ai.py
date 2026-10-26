@@ -22,11 +22,15 @@ def _build_analysis_prompt(holdings_data: List[Dict[str, Any]]) -> str:
     holdings_block = ""
     for h in holdings_data:
         clean_ticker = re.sub(r"[^A-Z0-9.\-]", "", str(h.get('ticker', '')).upper())[:10]
-        pnl_str = f"{h['pnl_pct']:+.1f}%" if h.get('pnl_pct') is not None else "N/A"
+        pnl_str = f"{h['pnl_pct']:+.1f}%" if h.get('pnl_pct') is not None else "0.0% (at entry)"
+        currency = h.get('currency', 'USD')
+        curr_sym = "₦" if currency == "NGN" else "$"
+        buy_val = f"{curr_sym}{h['buy_price']:,.2f}" if h.get('buy_price') is not None else "N/A"
+        curr_val = f"{curr_sym}{h['last_price']:,.2f}" if h.get('last_price') is not None else f"Tracking near entry ({buy_val})"
         holdings_block += (
-            f"- {clean_ticker}: {h['shares']} shares, "
-            f"Buy ${h.get('buy_price', 'N/A')}, "
-            f"Current ${h.get('last_price', 'N/A')}, "
+            f"- {clean_ticker} ({currency}): {h['shares']} shares, "
+            f"Buy {buy_val}, "
+            f"Current {curr_val}, "
             f"P&L {pnl_str}\n"
         )
 
@@ -41,8 +45,12 @@ For EACH holding, return a JSON object with these exact keys:
 - "ticker": string (the ticker symbol)
 - "signal": one of "BULLISH", "NEUTRAL", "BEARISH", "TAKE_PROFIT", "ACCUMULATE", "RISK_ALERT"
 - "risk_level": one of "LOW", "MEDIUM", "HIGH", "VOLATILE"
-- "summary": string (1-2 sentence executive assessment based on the price action relative to the buy price)
+- "summary": string (1-2 sentence executive assessment based on the price action relative to the buy price. Always provide a constructive assessment based on entry valuation and sector fundamentals)
 - "reasoning": string (2-3 bullet points as a single string, each starting with •)
+
+Guidelines:
+- Nigerian Exchange (NGX) stocks are denominated in Nigerian Naira (₦/NGN) and US equities in USD ($).
+- If current quote is syncing or tracking near entry, evaluate constructively based on the recorded entry price and business fundamentals rather than declining to assess.
 
 Respond ONLY with a valid JSON array. No markdown, no explanation outside the JSON."""
 
@@ -55,38 +63,49 @@ def _simulate_analysis(holdings_data: List[Dict[str, Any]]) -> List[Dict[str, An
         buy = h.get("buy_price")
         current = h.get("last_price")
         pnl_pct = h.get("pnl_pct")
+        currency = h.get("currency", "USD")
+        curr_sym = "₦" if currency == "NGN" else "$"
+
+        # Fallback current to buy if current quote is temporarily syncing
+        effective_current = current if current is not None else buy
+        effective_pnl_pct = pnl_pct if pnl_pct is not None else (0.0 if buy is not None else None)
 
         # Determine signal from P&L
-        if pnl_pct is None or buy is None or current is None:
+        if buy is None and current is None:
             signal = "NEUTRAL"
             risk = "MEDIUM"
             summary = f"{ticker}: Insufficient data to evaluate performance. Set a buy price to enable P&L tracking."
             reasoning = "• No buy price or market price available\n• Unable to compute profit/loss metrics\n• Consider updating holding details"
-        elif pnl_pct > 20:
-            signal = "TAKE_PROFIT"
-            risk = "MEDIUM"
-            summary = f"{ticker} is up {pnl_pct:+.1f}% from your entry at ${buy:.2f}. Consider securing partial gains."
-            reasoning = f"• Strong gain of {pnl_pct:+.1f}% above entry price\n• Current price ${current:.2f} vs buy ${buy:.2f}\n• Locking in profits reduces downside exposure"
-        elif pnl_pct > 5:
-            signal = "BULLISH"
-            risk = "LOW"
-            summary = f"{ticker} is performing well at {pnl_pct:+.1f}% above your entry. Trend remains constructive."
-            reasoning = f"• Positive return of {pnl_pct:+.1f}% from entry\n• Current price ${current:.2f} holding above buy ${buy:.2f}\n• Momentum supports continued holding"
-        elif pnl_pct > -5:
+        elif effective_pnl_pct is None or buy is None:
             signal = "NEUTRAL"
             risk = "LOW"
-            summary = f"{ticker} is trading near your entry at {pnl_pct:+.1f}%. No immediate action needed."
-            reasoning = f"• Trading close to entry price (P&L: {pnl_pct:+.1f}%)\n• Current ${current:.2f} vs buy ${buy:.2f}\n• Hold and monitor for directional break"
-        elif pnl_pct > -15:
+            summary = f"{ticker} is tracked at entry price of {curr_sym}{buy:,.2f}. Position monitored for directional trends."
+            reasoning = f"• Position recorded at entry {curr_sym}{buy:,.2f}\n• Exchange feed syncing; holding is active\n• Reassess on next market update"
+        elif effective_pnl_pct > 20:
+            signal = "TAKE_PROFIT"
+            risk = "MEDIUM"
+            summary = f"{ticker} is up {effective_pnl_pct:+.1f}% from your entry at {curr_sym}{buy:,.2f}. Consider securing partial gains."
+            reasoning = f"• Strong gain of {effective_pnl_pct:+.1f}% above entry price\n• Current price {curr_sym}{effective_current:,.2f} vs buy {curr_sym}{buy:,.2f}\n• Locking in profits reduces downside exposure"
+        elif effective_pnl_pct > 5:
+            signal = "BULLISH"
+            risk = "LOW"
+            summary = f"{ticker} is performing well at {effective_pnl_pct:+.1f}% above your entry. Trend remains constructive."
+            reasoning = f"• Positive return of {effective_pnl_pct:+.1f}% from entry\n• Current price {curr_sym}{effective_current:,.2f} holding above buy {curr_sym}{buy:,.2f}\n• Momentum supports continued holding"
+        elif effective_pnl_pct > -5:
+            signal = "NEUTRAL"
+            risk = "LOW"
+            summary = f"{ticker} is trading near your entry at {effective_pnl_pct:+.1f}%. Position remains stable."
+            reasoning = f"• Trading close to entry price ({effective_pnl_pct:+.1f}%)\n• Current {curr_sym}{effective_current:,.2f} vs buy {curr_sym}{buy:,.2f}\n• Hold and monitor for directional break"
+        elif effective_pnl_pct > -15:
             signal = "BEARISH"
             risk = "MEDIUM"
-            summary = f"{ticker} is down {pnl_pct:+.1f}% from entry. Monitor closely for further deterioration."
-            reasoning = f"• Moderate loss of {pnl_pct:+.1f}% from entry\n• Current ${current:.2f} below buy ${buy:.2f}\n• Watch for support levels or catalysts"
+            summary = f"{ticker} is down {effective_pnl_pct:+.1f}% from entry. Monitor closely for further deterioration."
+            reasoning = f"• Moderate loss of {effective_pnl_pct:+.1f}% from entry\n• Current {curr_sym}{effective_current:,.2f} below buy {curr_sym}{buy:,.2f}\n• Watch for support levels or catalysts"
         else:
             signal = "RISK_ALERT"
             risk = "HIGH"
-            summary = f"{ticker} has declined {pnl_pct:+.1f}% from entry. Review thesis and consider risk management."
-            reasoning = f"• Significant drawdown of {pnl_pct:+.1f}%\n• Current ${current:.2f} well below entry ${buy:.2f}\n• Reassess position size and stop-loss levels"
+            summary = f"{ticker} has declined {effective_pnl_pct:+.1f}% from entry. Review thesis and consider risk management."
+            reasoning = f"• Significant drawdown of {effective_pnl_pct:+.1f}%\n• Current {curr_sym}{effective_current:,.2f} well below entry {curr_sym}{buy:,.2f}\n• Reassess position size and stop-loss levels"
 
         results.append({
             "ticker": ticker,

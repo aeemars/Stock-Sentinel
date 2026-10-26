@@ -117,12 +117,14 @@ def view_portfolio(
             totals_by_currency[curr]["market_value"] += metrics["market_value"]
 
             ts = holding.get('last_price_updated_at')
+            is_ngx = (curr == "NGN") or is_ngx_ticker(holding['ticker'])
+            stale_threshold = 900 if is_ngx else 60
             if ts:
                 if last_updated_at is None or ts > last_updated_at:
                     last_updated_at = ts
-                # Check freshness (>60s)
+                # Check freshness
                 ts_cmp = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
-                if (now_utc - ts_cmp).total_seconds() > 60:
+                if (now_utc - ts_cmp).total_seconds() > stale_threshold:
                     needs_price_sync = True
             else:
                 needs_price_sync = True
@@ -324,11 +326,13 @@ def get_portfolio_live_prices(
         totals_by_currency[curr]["market_value"] += metrics["market_value"]
 
         ts = h.get('last_price_updated_at')
+        is_ngx = (curr == "NGN") or is_ngx_ticker(h['ticker'])
+        stale_threshold = 900 if is_ngx else 30
         if ts:
             if latest_update is None or ts > latest_update:
                 latest_update = ts
             ts_cmp = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
-            if (now_utc - ts_cmp).total_seconds() > 30:
+            if (now_utc - ts_cmp).total_seconds() > stale_threshold:
                 needs_sync = True
         else:
             needs_sync = True

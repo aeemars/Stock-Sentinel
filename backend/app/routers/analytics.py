@@ -35,7 +35,7 @@ def analytics(
         holdings = []
         if portfolio_ids:
             cur.execute("""
-                SELECT h.id, h.ticker, h.shares, h.last_price, h.portfolio_id, p.name as portfolio_name
+                SELECT h.id, h.ticker, h.shares, h.currency, h.last_price, h.portfolio_id, p.name as portfolio_name
                 FROM holdings h
                 JOIN portfolios p ON h.portfolio_id = p.id
                 WHERE p.user_id = %s

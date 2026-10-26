@@ -11,7 +11,10 @@ logger = logging.getLogger(__name__)
 # In-memory thread-safe short-term price cache to prevent duplicate external requests
 _CACHE_LOCK = threading.Lock()
 _PRICE_CACHE: Dict[str, Tuple[float, float]] = {}  # ticker -> (price, timestamp)
-DEFAULT_CACHE_TTL = 30.0  # seconds
+_NEGATIVE_CACHE: Dict[str, float] = {}  # ticker -> expire_timestamp
+DEFAULT_CACHE_TTL = 30.0  # seconds for US / Yahoo Finance
+DEFAULT_NGX_CACHE_TTL = 900.0  # 15 minutes for Nigerian Exchange (quotes update every 20-30m)
+_KOBO_CIRCUIT_BREAKER_UNTIL = 0.0  # epoch timestamp until which Kobo API calls are blocked (e.g. on 429)
 
 # Recognized Nigerian Exchange (NGX) equities for native Naira (NGN) resolution
 KNOWN_NGX_TICKERS: Set[str] = {
@@ -51,8 +54,26 @@ def get_ticker_currency(ticker: str) -> str:
     return "NGN" if is_ngx_ticker(ticker) else "USD"
 
 
-def get_cached_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Optional[float]:
+def is_kobo_circuit_breaker_active() -> bool:
+    """Check if Kobo Terminal API is currently in cooldown (e.g. after receiving 429)."""
+    global _KOBO_CIRCUIT_BREAKER_UNTIL
+    return time.time() < _KOBO_CIRCUIT_BREAKER_UNTIL
+
+
+def trip_kobo_circuit_breaker(duration_seconds: float = 900.0) -> None:
+    """Trip circuit breaker to prevent external calls when rate limits/quotas are exceeded."""
+    global _KOBO_CIRCUIT_BREAKER_UNTIL
+    _KOBO_CIRCUIT_BREAKER_UNTIL = time.time() + duration_seconds
+    logger.warning(
+        f"[Kobo Terminal] Circuit breaker activated for {int(duration_seconds)}s "
+        f"(API calls suspended until {time.strftime('%H:%M:%S', time.localtime(_KOBO_CIRCUIT_BREAKER_UNTIL))})"
+    )
+
+
+def get_cached_price(ticker: str, ttl: Optional[float] = None) -> Optional[float]:
     ticker = ticker.strip().upper()
+    if ttl is None:
+        ttl = DEFAULT_NGX_CACHE_TTL if is_ngx_ticker(ticker) else DEFAULT_CACHE_TTL
     now = time.time()
     with _CACHE_LOCK:
         if ticker in _PRICE_CACHE:
@@ -68,20 +89,25 @@ def set_cached_price(ticker: str, price: float) -> None:
         _PRICE_CACHE[ticker] = (round(float(price), 4), time.time())
 
 
-def fetch_kobo_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Optional[float]:
+def fetch_kobo_all_stocks(ttl: float = DEFAULT_NGX_CACHE_TTL) -> Dict[str, float]:
     """
-    Fetch live dynamic market price for a Nigerian stock from Kobo Terminal API.
-    Shares the same cache and provides graceful fallbacks.
+    Fetch market prices for all 150+ NGX listed equities in a single request
+    via GET /api/ngxdata/stocks. Populates cache for all tickers simultaneously,
+    saving requests against daily quota.
     """
-    clean_ticker = ticker.strip().upper()
-    if not clean_ticker:
-        return None
+    if is_kobo_circuit_breaker_active():
+        logger.debug("[Kobo Terminal] Circuit breaker active, skipping bulk stock fetch")
+        return {}
 
-    cached = get_cached_price(clean_ticker, ttl=ttl)
-    if cached is not None:
-        return cached
-
-    symbol = normalize_ngx_symbol(clean_ticker)
+    bulk_cached = get_cached_price("__NGX_ALL_STOCKS_SYNCED__", ttl=ttl)
+    if bulk_cached is not None:
+        # Return currently cached NGX tickers
+        now = time.time()
+        with _CACHE_LOCK:
+            return {
+                k: v[0] for k, v in _PRICE_CACHE.items()
+                if is_ngx_ticker(k) and (now - v[1]) <= ttl
+            }
 
     from app.config import Settings
     settings = Settings()
@@ -90,51 +116,137 @@ def fetch_kobo_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Opti
 
     headers = {
         "Accept": "application/json",
-        "Content-Type": "application/json",
         "User-Agent": "Stock-Sentinel/1.0",
     }
     if api_key:
         headers["X-API-Key"] = api_key
-        headers["Authorization"] = f"Bearer {api_key}"
 
-    # Official Kobo Terminal NGX endpoint: /api/ngxdata/prices/:symbol
-    endpoints = [
-        f"{base_url}/api/ngxdata/prices/{symbol}",
-        f"{base_url}/api/ngxdata/fundamentals/{symbol}",
-        f"{base_url}/api/stocks/{symbol}",
-        f"{base_url}/stocks/{symbol}",
-    ]
+    url = f"{base_url}/api/ngxdata/stocks"
+    results: Dict[str, float] = {}
 
-    price = None
     try:
         import httpx
-        with httpx.Client(timeout=8.0) as client:
-            for url in endpoints:
-                try:
-                    resp = client.get(url, headers=headers)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        candidate = None
-                        if isinstance(data, dict):
-                            inner = data.get("data") if isinstance(data.get("data"), dict) else data
-                            for key in ("current_price", "price", "last_price", "regularMarketPrice", "close", "last"):
-                                val = inner.get(key)
-                                if val is not None:
-                                    try:
-                                        cand_val = float(val)
-                                        if cand_val > 0:
-                                            candidate = cand_val
-                                            break
-                                    except (ValueError, TypeError):
-                                        continue
-                        if candidate is not None:
-                            price = candidate
-                            break
-                    elif resp.status_code in (401, 403, 404):
-                        continue
-                except Exception as req_err:
-                    logger.debug(f"Kobo endpoint {url} attempt failed: {req_err}")
-                    continue
+        with httpx.Client(timeout=12.0) as client:
+            resp = client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    for item in data:
+                        if not isinstance(item, dict):
+                            continue
+                        sym = item.get("symbol")
+                        if not sym:
+                            continue
+                        clean_sym = sym.strip().upper()
+                        # Extract price candidates
+                        price_val = item.get("current_price") or item.get("price") or item.get("close")
+                        if price_val is not None:
+                            try:
+                                p = round(float(price_val), 4)
+                                if p > 0:
+                                    set_cached_price(clean_sym, p)
+                                    set_cached_price(f"{clean_sym}.NG", p)
+                                    base = normalize_ngx_symbol(clean_sym)
+                                    set_cached_price(base, p)
+                                    results[clean_sym] = p
+                            except (ValueError, TypeError):
+                                pass
+                    set_cached_price("__NGX_ALL_STOCKS_SYNCED__", 1.0)
+                    logger.info(f"[Kobo Terminal] Successfully refreshed bulk NGX prices ({len(results)} equities)")
+                    return results
+            elif resp.status_code == 429:
+                trip_kobo_circuit_breaker(900.0)
+            elif resp.status_code in (401, 403):
+                logger.warning(f"[Kobo Terminal] Authentication error {resp.status_code} on bulk stocks fetch")
+    except Exception as exc:
+        logger.warning(f"[Kobo Terminal] Bulk stocks fetch failed: {exc}")
+
+    return results
+
+
+def fetch_kobo_ticker_price(ticker: str, ttl: float = DEFAULT_NGX_CACHE_TTL) -> Optional[float]:
+    """
+    Fetch live dynamic market price for a Nigerian stock from Kobo Terminal API.
+    Shares the same cache, respects circuit breaker, and queries the official endpoint.
+    """
+    clean_ticker = ticker.strip().upper()
+    if not clean_ticker:
+        return None
+
+    # 1. Cache hit
+    cached = get_cached_price(clean_ticker, ttl=ttl)
+    if cached is not None:
+        return cached
+
+    symbol = normalize_ngx_symbol(clean_ticker)
+    cached_symbol = get_cached_price(symbol, ttl=ttl)
+    if cached_symbol is not None:
+        return cached_symbol
+
+    # 2. Check circuit breaker and negative cache
+    now = time.time()
+    with _CACHE_LOCK:
+        neg_expire = _NEGATIVE_CACHE.get(clean_ticker)
+        if neg_expire and now < neg_expire:
+            return None
+
+    if is_kobo_circuit_breaker_active():
+        return None
+
+    # 3. Check if bulk sync can fulfill this request (1 call covers all NGX stocks)
+    bulk_results = fetch_kobo_all_stocks(ttl=ttl)
+    if symbol in bulk_results:
+        return bulk_results[symbol]
+    if clean_ticker in bulk_results:
+        return bulk_results[clean_ticker]
+
+    # Re-check cache after bulk attempt
+    cached = get_cached_price(clean_ticker, ttl=ttl) or get_cached_price(symbol, ttl=ttl)
+    if cached is not None:
+        return cached
+
+    if is_kobo_circuit_breaker_active():
+        return None
+
+    # 4. Fallback: single ticker query to official /api/ngxdata/prices/:symbol
+    from app.config import Settings
+    settings = Settings()
+    api_key = settings.effective_kobo_api_key
+    base_url = (settings.KOBO_TERMINAL_BASE_URL or "https://koboterminal.com").rstrip("/")
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "Stock-Sentinel/1.0",
+    }
+    if api_key:
+        headers["X-API-Key"] = api_key
+
+    url = f"{base_url}/api/ngxdata/prices/{symbol}"
+    price = None
+
+    try:
+        import httpx
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, dict):
+                    inner = data.get("data") if isinstance(data.get("data"), dict) else data
+                    for key in ("current_price", "price", "last_price", "close", "last"):
+                        val = inner.get(key)
+                        if val is not None:
+                            try:
+                                cand_val = float(val)
+                                if cand_val > 0:
+                                    price = cand_val
+                                    break
+                            except (ValueError, TypeError):
+                                continue
+            elif resp.status_code == 429:
+                trip_kobo_circuit_breaker(900.0)
+            elif resp.status_code == 404:
+                with _CACHE_LOCK:
+                    _NEGATIVE_CACHE[clean_ticker] = time.time() + 300.0
     except Exception as exc:
         logger.warning(f"Error fetching Kobo Terminal price for {symbol}: {exc}")
 
@@ -215,7 +327,24 @@ def fetch_latest_prices(tickers: List[str], max_workers: int = 6) -> Dict[str, f
     if not missing:
         return results
 
-    # Fetch missing tickers concurrently
+    # If any NGX tickers are missing, attempt bulk NGX fetch once (populates all NGX symbols)
+    ngx_missing = [t for t in missing if is_ngx_ticker(t)]
+    if ngx_missing and not is_kobo_circuit_breaker_active():
+        bulk_data = fetch_kobo_all_stocks()
+        if bulk_data:
+            still_missing = []
+            for t in missing:
+                cached = get_cached_price(t)
+                if cached is not None:
+                    results[t] = cached
+                else:
+                    still_missing.append(t)
+            missing = still_missing
+
+    if not missing:
+        return results
+
+    # Fetch remaining missing tickers concurrently
     workers = min(len(missing), max_workers)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {executor.submit(fetch_single_ticker_price, ticker): ticker for ticker in missing}
@@ -239,19 +368,20 @@ def sync_portfolio_prices(
 ) -> Dict[str, float]:
     """
     Check if portfolio holdings have stale or missing prices.
-    If so, fetches dynamic latest prices from yfinance and updates the database.
+    If so, fetches dynamic latest prices and updates the database.
+    Falls back gracefully to entry price if market quote is unavailable.
     Returns a dictionary of ticker -> price.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         if force:
             cur.execute("""
-                SELECT id, ticker, last_price, last_price_updated_at
+                SELECT id, ticker, buy_price, last_price, last_price_updated_at
                 FROM holdings
                 WHERE portfolio_id = %s
             """, (portfolio_id,))
         else:
             cur.execute("""
-                SELECT id, ticker, last_price, last_price_updated_at
+                SELECT id, ticker, buy_price, last_price, last_price_updated_at
                 FROM holdings
                 WHERE portfolio_id = %s
                   AND (
@@ -269,13 +399,11 @@ def sync_portfolio_prices(
     tickers = list({row["ticker"] for row in stale_holdings})
     new_prices = fetch_latest_prices(tickers)
 
-    if not new_prices:
-        return {}
-
     try:
         with conn.cursor() as cur:
             for row in stale_holdings:
-                price = new_prices.get(row["ticker"])
+                ticker = row["ticker"]
+                price = new_prices.get(ticker)
                 if price is not None:
                     cur.execute("""
                         UPDATE holdings
@@ -283,6 +411,15 @@ def sync_portfolio_prices(
                             last_price_updated_at = CURRENT_TIMESTAMP
                         WHERE id = %s
                     """, (price, row["id"]))
+                elif row.get("last_price") is None and row.get("buy_price") is not None:
+                    # Interim fallback to entry price if market quote is temporarily rate-limited or offline
+                    cur.execute("""
+                        UPDATE holdings
+                        SET last_price = %s,
+                            last_price_updated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    """, (row["buy_price"], row["id"]))
+                    new_prices[ticker] = float(row["buy_price"])
         conn.commit()
         from app.services.cache import cache
         cache.delete(f"data:live_prices:{portfolio_id}")
@@ -301,7 +438,7 @@ def sync_user_holdings_prices(
     """Sync prices for all holdings belonging to a user across all portfolios if stale."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("""
-            SELECT h.id, h.ticker, h.last_price, h.last_price_updated_at
+            SELECT h.id, h.ticker, h.buy_price, h.last_price, h.last_price_updated_at
             FROM holdings h
             JOIN portfolios p ON h.portfolio_id = p.id
             WHERE p.user_id = %s
@@ -319,13 +456,11 @@ def sync_user_holdings_prices(
     tickers = list({row["ticker"] for row in stale_holdings})
     new_prices = fetch_latest_prices(tickers)
 
-    if not new_prices:
-        return {}
-
     try:
         with conn.cursor() as cur:
             for row in stale_holdings:
-                price = new_prices.get(row["ticker"])
+                ticker = row["ticker"]
+                price = new_prices.get(ticker)
                 if price is not None:
                     cur.execute("""
                         UPDATE holdings
@@ -333,6 +468,15 @@ def sync_user_holdings_prices(
                             last_price_updated_at = CURRENT_TIMESTAMP
                         WHERE id = %s
                     """, (price, row["id"]))
+                elif row.get("last_price") is None and row.get("buy_price") is not None:
+                    # Interim fallback to entry price if market quote is temporarily rate-limited or offline
+                    cur.execute("""
+                        UPDATE holdings
+                        SET last_price = %s,
+                            last_price_updated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    """, (row["buy_price"], row["id"]))
+                    new_prices[ticker] = float(row["buy_price"])
         conn.commit()
     except Exception as exc:
         conn.rollback()
@@ -386,10 +530,10 @@ def background_sync_portfolio_prices(portfolio_id: int, max_age_seconds: int = 6
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 if force:
-                    cur.execute("SELECT id, ticker FROM holdings WHERE portfolio_id = %s", (portfolio_id,))
+                    cur.execute("SELECT id, ticker, buy_price, last_price FROM holdings WHERE portfolio_id = %s", (portfolio_id,))
                 else:
                     cur.execute("""
-                        SELECT id, ticker FROM holdings
+                        SELECT id, ticker, buy_price, last_price FROM holdings
                         WHERE portfolio_id = %s
                           AND (
                               last_price IS NULL
@@ -404,18 +548,17 @@ def background_sync_portfolio_prices(portfolio_id: int, max_age_seconds: int = 6
         if not stale_holdings:
             return
 
-        # Phase 2: External network fetch (ZERO DB connections held during Yahoo Finance requests)
+        # Phase 2: External network fetch (ZERO DB connections held during external requests)
         tickers = list({row["ticker"] for row in stale_holdings})
         new_prices = fetch_latest_prices(tickers)
-        if not new_prices:
-            return
 
         # Phase 3: Check out DB connection briefly to apply updates and commit (<1ms)
         conn = get_db_connection()
         try:
             with conn.cursor() as cur:
                 for row in stale_holdings:
-                    price = new_prices.get(row["ticker"])
+                    ticker = row["ticker"]
+                    price = new_prices.get(ticker)
                     if price is not None:
                         cur.execute("""
                             UPDATE holdings
@@ -423,6 +566,14 @@ def background_sync_portfolio_prices(portfolio_id: int, max_age_seconds: int = 6
                                 last_price_updated_at = CURRENT_TIMESTAMP
                             WHERE id = %s
                         """, (price, row["id"]))
+                    elif row.get("last_price") is None and row.get("buy_price") is not None:
+                        # Interim fallback to entry price if market quote is temporarily rate-limited or offline
+                        cur.execute("""
+                            UPDATE holdings
+                            SET last_price = %s,
+                                last_price_updated_at = CURRENT_TIMESTAMP
+                            WHERE id = %s
+                        """, (row["buy_price"], row["id"]))
             conn.commit()
             cache.delete(f"data:live_prices:{portfolio_id}")
             cache.delete_by_prefix("data:portfolio_view:")
@@ -453,7 +604,7 @@ def background_sync_user_prices(user_id: int, max_age_seconds: int = 120):
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("""
-                    SELECT h.id, h.ticker FROM holdings h
+                    SELECT h.id, h.ticker, h.buy_price, h.last_price FROM holdings h
                     JOIN portfolios p ON h.portfolio_id = p.id
                     WHERE p.user_id = %s
                       AND (
@@ -471,14 +622,13 @@ def background_sync_user_prices(user_id: int, max_age_seconds: int = 120):
 
         tickers = list({row["ticker"] for row in stale_holdings})
         new_prices = fetch_latest_prices(tickers)
-        if not new_prices:
-            return
 
         conn = get_db_connection()
         try:
             with conn.cursor() as cur:
                 for row in stale_holdings:
-                    price = new_prices.get(row["ticker"])
+                    ticker = row["ticker"]
+                    price = new_prices.get(ticker)
                     if price is not None:
                         cur.execute("""
                             UPDATE holdings
@@ -486,6 +636,14 @@ def background_sync_user_prices(user_id: int, max_age_seconds: int = 120):
                                 last_price_updated_at = CURRENT_TIMESTAMP
                             WHERE id = %s
                         """, (price, row["id"]))
+                    elif row.get("last_price") is None and row.get("buy_price") is not None:
+                        # Interim fallback to entry price if market quote is temporarily rate-limited or offline
+                        cur.execute("""
+                            UPDATE holdings
+                            SET last_price = %s,
+                                last_price_updated_at = CURRENT_TIMESTAMP
+                            WHERE id = %s
+                        """, (row["buy_price"], row["id"]))
             conn.commit()
             cache.delete_by_prefix(f"data:user:{user_id}:")
             cache.delete_by_prefix("data:live_prices:")
