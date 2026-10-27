@@ -54,19 +54,48 @@ def get_ticker_currency(ticker: str) -> str:
     return "NGN" if is_ngx_ticker(ticker) else "USD"
 
 
+def get_seconds_until_midnight_wat() -> float:
+    """Compute seconds remaining until midnight West Africa Time (WAT / UTC+1) when Kobo quota resets."""
+    from datetime import datetime, timezone, timedelta
+    wat_tz = timezone(timedelta(hours=1))
+    now_wat = datetime.now(wat_tz)
+    tomorrow_wat = (now_wat + timedelta(days=1)).replace(hour=0, minute=2, second=0, microsecond=0)
+    diff = (tomorrow_wat - now_wat).total_seconds()
+    return max(diff, 1800.0)
+
+
 def is_kobo_circuit_breaker_active() -> bool:
     """Check if Kobo Terminal API is currently in cooldown (e.g. after receiving 429)."""
     global _KOBO_CIRCUIT_BREAKER_UNTIL
-    return time.time() < _KOBO_CIRCUIT_BREAKER_UNTIL
+    now = time.time()
+    if now < _KOBO_CIRCUIT_BREAKER_UNTIL:
+        return True
+    try:
+        from app.services.cache import cache
+        cached_until = cache.get("kobo_circuit_breaker_until")
+        if cached_until and now < float(cached_until):
+            _KOBO_CIRCUIT_BREAKER_UNTIL = float(cached_until)
+            return True
+    except Exception:
+        pass
+    return False
 
 
-def trip_kobo_circuit_breaker(duration_seconds: float = 900.0) -> None:
+def trip_kobo_circuit_breaker(duration_seconds: float = 900.0, reason: str = "") -> None:
     """Trip circuit breaker to prevent external calls when rate limits/quotas are exceeded."""
     global _KOBO_CIRCUIT_BREAKER_UNTIL
     _KOBO_CIRCUIT_BREAKER_UNTIL = time.time() + duration_seconds
+    try:
+        from app.services.cache import cache
+        cache.set("kobo_circuit_breaker_until", _KOBO_CIRCUIT_BREAKER_UNTIL, ttl=int(duration_seconds))
+        if reason:
+            cache.set("kobo_circuit_breaker_reason", reason, ttl=int(duration_seconds))
+    except Exception:
+        pass
     logger.warning(
         f"[Kobo Terminal] Circuit breaker activated for {int(duration_seconds)}s "
-        f"(API calls suspended until {time.strftime('%H:%M:%S', time.localtime(_KOBO_CIRCUIT_BREAKER_UNTIL))})"
+        f"({reason or 'Rate limit/Quota exceeded'}). "
+        f"API calls suspended until {time.strftime('%H:%M:%S', time.localtime(_KOBO_CIRCUIT_BREAKER_UNTIL))}"
     )
 
 
@@ -89,7 +118,7 @@ def set_cached_price(ticker: str, price: float) -> None:
         _PRICE_CACHE[ticker] = (round(float(price), 4), time.time())
 
 
-def fetch_kobo_all_stocks(ttl: float = DEFAULT_NGX_CACHE_TTL) -> Dict[str, float]:
+def fetch_kobo_all_stocks(ttl: float = DEFAULT_NGX_CACHE_TTL, force: bool = False) -> Dict[str, float]:
     """
     Fetch market prices for all 150+ NGX listed equities in a single request
     via GET /api/ngxdata/stocks. Populates cache for all tickers simultaneously,
@@ -99,15 +128,16 @@ def fetch_kobo_all_stocks(ttl: float = DEFAULT_NGX_CACHE_TTL) -> Dict[str, float
         logger.debug("[Kobo Terminal] Circuit breaker active, skipping bulk stock fetch")
         return {}
 
-    bulk_cached = get_cached_price("__NGX_ALL_STOCKS_SYNCED__", ttl=ttl)
-    if bulk_cached is not None:
-        # Return currently cached NGX tickers
-        now = time.time()
-        with _CACHE_LOCK:
-            return {
-                k: v[0] for k, v in _PRICE_CACHE.items()
-                if is_ngx_ticker(k) and (now - v[1]) <= ttl
-            }
+    if not force:
+        bulk_cached = get_cached_price("__NGX_ALL_STOCKS_SYNCED__", ttl=ttl)
+        if bulk_cached is not None:
+            # Return currently cached NGX tickers
+            now = time.time()
+            with _CACHE_LOCK:
+                return {
+                    k: v[0] for k, v in _PRICE_CACHE.items()
+                    if is_ngx_ticker(k) and (now - v[1]) <= ttl
+                }
 
     from app.config import Settings
     settings = Settings()
@@ -126,12 +156,18 @@ def fetch_kobo_all_stocks(ttl: float = DEFAULT_NGX_CACHE_TTL) -> Dict[str, float
 
     try:
         import httpx
-        with httpx.Client(timeout=12.0) as client:
+        with httpx.Client(timeout=15.0) as client:
             resp = client.get(url, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
-                if isinstance(data, list):
-                    for item in data:
+                stocks = []
+                if isinstance(data, dict):
+                    stocks = data.get("stocks") or data.get("data") or []
+                elif isinstance(data, list):
+                    stocks = data
+
+                if isinstance(stocks, list):
+                    for item in stocks:
                         if not isinstance(item, dict):
                             continue
                         sym = item.get("symbol")
@@ -139,23 +175,38 @@ def fetch_kobo_all_stocks(ttl: float = DEFAULT_NGX_CACHE_TTL) -> Dict[str, float
                             continue
                         clean_sym = sym.strip().upper()
                         # Extract price candidates
-                        price_val = item.get("current_price") or item.get("price") or item.get("close")
+                        price_val = (
+                            item.get("current_price") or
+                            item.get("price") or
+                            item.get("close_price") or
+                            item.get("close") or
+                            item.get("previous_close")
+                        )
                         if price_val is not None:
                             try:
                                 p = round(float(price_val), 4)
                                 if p > 0:
-                                    set_cached_price(clean_sym, p)
-                                    set_cached_price(f"{clean_sym}.NG", p)
                                     base = normalize_ngx_symbol(clean_sym)
+                                    set_cached_price(clean_sym, p)
                                     set_cached_price(base, p)
+                                    set_cached_price(f"{base}.NG", p)
+                                    set_cached_price(f"{base}.LG", p)
                                     results[clean_sym] = p
+                                    results[base] = p
+                                    results[f"{base}.NG"] = p
+                                    results[f"{base}.LG"] = p
                             except (ValueError, TypeError):
                                 pass
                     set_cached_price("__NGX_ALL_STOCKS_SYNCED__", 1.0)
                     logger.info(f"[Kobo Terminal] Successfully refreshed bulk NGX prices ({len(results)} equities)")
                     return results
             elif resp.status_code == 429:
-                trip_kobo_circuit_breaker(900.0)
+                err_text = resp.text.lower()
+                if "daily" in err_text or "limit" in err_text or "midnight" in err_text:
+                    cooldown = get_seconds_until_midnight_wat()
+                    trip_kobo_circuit_breaker(cooldown, reason="Daily 100-request quota reached (resets at midnight WAT)")
+                else:
+                    trip_kobo_circuit_breaker(900.0, reason="Rate limit reached (15m cooldown)")
             elif resp.status_code in (401, 403):
                 logger.warning(f"[Kobo Terminal] Authentication error {resp.status_code} on bulk stocks fetch")
     except Exception as exc:
@@ -164,7 +215,7 @@ def fetch_kobo_all_stocks(ttl: float = DEFAULT_NGX_CACHE_TTL) -> Dict[str, float
     return results
 
 
-def fetch_kobo_ticker_price(ticker: str, ttl: float = DEFAULT_NGX_CACHE_TTL) -> Optional[float]:
+def fetch_kobo_ticker_price(ticker: str, ttl: float = DEFAULT_NGX_CACHE_TTL, force: bool = False) -> Optional[float]:
     """
     Fetch live dynamic market price for a Nigerian stock from Kobo Terminal API.
     Shares the same cache, respects circuit breaker, and queries the official endpoint.
@@ -173,42 +224,42 @@ def fetch_kobo_ticker_price(ticker: str, ttl: float = DEFAULT_NGX_CACHE_TTL) -> 
     if not clean_ticker:
         return None
 
-    # 1. Cache hit
-    cached = get_cached_price(clean_ticker, ttl=ttl)
-    if cached is not None:
-        return cached
-
     symbol = normalize_ngx_symbol(clean_ticker)
-    cached_symbol = get_cached_price(symbol, ttl=ttl)
-    if cached_symbol is not None:
-        return cached_symbol
+
+    # 1. Cache hit (unless forced)
+    if not force:
+        cached = get_cached_price(clean_ticker, ttl=ttl) or get_cached_price(symbol, ttl=ttl) or get_cached_price(f"{symbol}.NG", ttl=ttl)
+        if cached is not None:
+            return cached
 
     # 2. Check circuit breaker and negative cache
     now = time.time()
     with _CACHE_LOCK:
         neg_expire = _NEGATIVE_CACHE.get(clean_ticker)
-        if neg_expire and now < neg_expire:
+        if neg_expire and now < neg_expire and not force:
             return None
 
     if is_kobo_circuit_breaker_active():
         return None
 
     # 3. Check if bulk sync can fulfill this request (1 call covers all NGX stocks)
-    bulk_results = fetch_kobo_all_stocks(ttl=ttl)
+    bulk_results = fetch_kobo_all_stocks(ttl=ttl, force=force)
     if symbol in bulk_results:
         return bulk_results[symbol]
     if clean_ticker in bulk_results:
         return bulk_results[clean_ticker]
+    if f"{symbol}.NG" in bulk_results:
+        return bulk_results[f"{symbol}.NG"]
 
     # Re-check cache after bulk attempt
     cached = get_cached_price(clean_ticker, ttl=ttl) or get_cached_price(symbol, ttl=ttl)
-    if cached is not None:
+    if cached is not None and not force:
         return cached
 
     if is_kobo_circuit_breaker_active():
         return None
 
-    # 4. Fallback: single ticker query to official /api/ngxdata/prices/:symbol
+    # 4. Fallback: single ticker query to official /api/ngxdata/prices/:symbol?days=1
     from app.config import Settings
     settings = Settings()
     api_key = settings.effective_kobo_api_key
@@ -221,29 +272,51 @@ def fetch_kobo_ticker_price(ticker: str, ttl: float = DEFAULT_NGX_CACHE_TTL) -> 
     if api_key:
         headers["X-API-Key"] = api_key
 
-    url = f"{base_url}/api/ngxdata/prices/{symbol}"
+    # Note: Free tier requires ?days=1 (or <= 7); omitting days asks for full history since 2000, triggering 403
+    url = f"{base_url}/api/ngxdata/prices/{symbol}?days=1"
     price = None
 
     try:
         import httpx
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=12.0) as client:
             resp = client.get(url, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 if isinstance(data, dict):
-                    inner = data.get("data") if isinstance(data.get("data"), dict) else data
-                    for key in ("current_price", "price", "last_price", "close", "last"):
-                        val = inner.get(key)
-                        if val is not None:
-                            try:
-                                cand_val = float(val)
-                                if cand_val > 0:
-                                    price = cand_val
-                                    break
-                            except (ValueError, TypeError):
-                                continue
+                    # Check prices array if present
+                    prices_arr = data.get("prices")
+                    if isinstance(prices_arr, list) and prices_arr:
+                        latest_quote = prices_arr[0]
+                        if isinstance(latest_quote, dict):
+                            for key in ("close_price", "current_price", "price", "open_price", "last"):
+                                val = latest_quote.get(key)
+                                if val is not None:
+                                    try:
+                                        cand_val = float(val)
+                                        if cand_val > 0:
+                                            price = cand_val
+                                            break
+                                    except (ValueError, TypeError):
+                                        continue
+                    if price is None:
+                        inner = data.get("data") if isinstance(data.get("data"), dict) else data
+                        for key in ("current_price", "price", "close_price", "last_price", "close", "last"):
+                            val = inner.get(key)
+                            if val is not None:
+                                try:
+                                    cand_val = float(val)
+                                    if cand_val > 0:
+                                        price = cand_val
+                                        break
+                                except (ValueError, TypeError):
+                                    continue
             elif resp.status_code == 429:
-                trip_kobo_circuit_breaker(900.0)
+                err_text = resp.text.lower()
+                if "daily" in err_text or "limit" in err_text or "midnight" in err_text:
+                    cooldown = get_seconds_until_midnight_wat()
+                    trip_kobo_circuit_breaker(cooldown, reason="Daily 100-request quota reached (resets at midnight WAT)")
+                else:
+                    trip_kobo_circuit_breaker(900.0, reason="Rate limit reached (15m cooldown)")
             elif resp.status_code == 404:
                 with _CACHE_LOCK:
                     _NEGATIVE_CACHE[clean_ticker] = time.time() + 300.0
@@ -253,15 +326,14 @@ def fetch_kobo_ticker_price(ticker: str, ttl: float = DEFAULT_NGX_CACHE_TTL) -> 
     if price is not None and price > 0:
         price = round(float(price), 4)
         set_cached_price(clean_ticker, price)
-        if symbol != clean_ticker:
-            set_cached_price(symbol, price)
-            set_cached_price(f"{symbol}.NG", price)
+        set_cached_price(symbol, price)
+        set_cached_price(f"{symbol}.NG", price)
         return price
 
     return None
 
 
-def fetch_single_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Optional[float]:
+def fetch_single_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL, force: bool = False) -> Optional[float]:
     """
     Fetch current dynamic market price for a single ticker.
     Routes Nigerian stocks (NGN) to Kobo Terminal API and US/global stocks (USD) to YFinance.
@@ -270,13 +342,14 @@ def fetch_single_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Op
     if not clean_ticker:
         return None
 
-    cached = get_cached_price(clean_ticker, ttl=ttl)
-    if cached is not None:
-        return cached
+    if not force:
+        cached = get_cached_price(clean_ticker, ttl=ttl)
+        if cached is not None:
+            return cached
 
     # Smart Routing: Nigerian Exchange tickers -> Kobo Terminal API
     if is_ngx_ticker(clean_ticker):
-        return fetch_kobo_ticker_price(clean_ticker, ttl=ttl)
+        return fetch_kobo_ticker_price(clean_ticker, ttl=ttl, force=force)
 
     # Global / US Equities -> Yahoo Finance
     price = None
@@ -307,7 +380,7 @@ def fetch_single_ticker_price(ticker: str, ttl: float = DEFAULT_CACHE_TTL) -> Op
     return None
 
 
-def fetch_latest_prices(tickers: List[str], max_workers: int = 6) -> Dict[str, float]:
+def fetch_latest_prices(tickers: List[str], max_workers: int = 6, force: bool = False) -> Dict[str, float]:
     """Concurrently fetch latest market prices for a list of tickers."""
     cleaned = list({t.strip().upper() for t in tickers if t and t.strip()})
     if not cleaned:
@@ -316,13 +389,16 @@ def fetch_latest_prices(tickers: List[str], max_workers: int = 6) -> Dict[str, f
     results: Dict[str, float] = {}
     missing: List[str] = []
 
-    # Check cache first
-    for ticker in cleaned:
-        cached = get_cached_price(ticker)
-        if cached is not None:
-            results[ticker] = cached
-        else:
-            missing.append(ticker)
+    # Check cache first (unless forced)
+    if not force:
+        for ticker in cleaned:
+            cached = get_cached_price(ticker)
+            if cached is not None:
+                results[ticker] = cached
+            else:
+                missing.append(ticker)
+    else:
+        missing = list(cleaned)
 
     if not missing:
         return results
@@ -330,13 +406,19 @@ def fetch_latest_prices(tickers: List[str], max_workers: int = 6) -> Dict[str, f
     # If any NGX tickers are missing, attempt bulk NGX fetch once (populates all NGX symbols)
     ngx_missing = [t for t in missing if is_ngx_ticker(t)]
     if ngx_missing and not is_kobo_circuit_breaker_active():
-        bulk_data = fetch_kobo_all_stocks()
+        bulk_data = fetch_kobo_all_stocks(force=force)
         if bulk_data:
             still_missing = []
             for t in missing:
-                cached = get_cached_price(t)
-                if cached is not None:
-                    results[t] = cached
+                base_t = normalize_ngx_symbol(t)
+                p = (
+                    bulk_data.get(t) or
+                    bulk_data.get(base_t) or
+                    bulk_data.get(f"{base_t}.NG") or
+                    get_cached_price(t)
+                )
+                if p is not None:
+                    results[t] = p
                 else:
                     still_missing.append(t)
             missing = still_missing
@@ -347,7 +429,7 @@ def fetch_latest_prices(tickers: List[str], max_workers: int = 6) -> Dict[str, f
     # Fetch remaining missing tickers concurrently
     workers = min(len(missing), max_workers)
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {executor.submit(fetch_single_ticker_price, ticker): ticker for ticker in missing}
+        futures = {executor.submit(fetch_single_ticker_price, ticker, DEFAULT_CACHE_TTL, force): ticker for ticker in missing}
         for future in futures:
             ticker = futures[future]
             try:
@@ -397,13 +479,20 @@ def sync_portfolio_prices(
         return {}
 
     tickers = list({row["ticker"] for row in stale_holdings})
-    new_prices = fetch_latest_prices(tickers)
+    new_prices = fetch_latest_prices(tickers, force=force)
 
     try:
         with conn.cursor() as cur:
             for row in stale_holdings:
                 ticker = row["ticker"]
-                price = new_prices.get(ticker)
+                base_t = normalize_ngx_symbol(ticker)
+                price = (
+                    new_prices.get(ticker) or
+                    new_prices.get(base_t) or
+                    new_prices.get(f"{base_t}.NG") or
+                    get_cached_price(ticker) or
+                    get_cached_price(base_t)
+                )
                 if price is not None:
                     cur.execute("""
                         UPDATE holdings
@@ -420,6 +509,14 @@ def sync_portfolio_prices(
                         WHERE id = %s
                     """, (row["buy_price"], row["id"]))
                     new_prices[ticker] = float(row["buy_price"])
+                elif row.get("last_price") is not None and is_ngx_ticker(ticker) and is_kobo_circuit_breaker_active():
+                    # Preserve existing last price and bump timestamp during quota cooldown to prevent tight-loop polling
+                    cur.execute("""
+                        UPDATE holdings
+                        SET last_price_updated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    """, (row["id"],))
+                    new_prices[ticker] = float(row["last_price"])
         conn.commit()
         from app.services.cache import cache
         cache.delete(f"data:live_prices:{portfolio_id}")
@@ -460,7 +557,14 @@ def sync_user_holdings_prices(
         with conn.cursor() as cur:
             for row in stale_holdings:
                 ticker = row["ticker"]
-                price = new_prices.get(ticker)
+                base_t = normalize_ngx_symbol(ticker)
+                price = (
+                    new_prices.get(ticker) or
+                    new_prices.get(base_t) or
+                    new_prices.get(f"{base_t}.NG") or
+                    get_cached_price(ticker) or
+                    get_cached_price(base_t)
+                )
                 if price is not None:
                     cur.execute("""
                         UPDATE holdings
@@ -477,6 +581,14 @@ def sync_user_holdings_prices(
                         WHERE id = %s
                     """, (row["buy_price"], row["id"]))
                     new_prices[ticker] = float(row["buy_price"])
+                elif row.get("last_price") is not None and is_ngx_ticker(ticker) and is_kobo_circuit_breaker_active():
+                    # Preserve existing last price and bump timestamp during quota cooldown to prevent tight-loop polling
+                    cur.execute("""
+                        UPDATE holdings
+                        SET last_price_updated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    """, (row["id"],))
+                    new_prices[ticker] = float(row["last_price"])
         conn.commit()
     except Exception as exc:
         conn.rollback()
@@ -550,7 +662,7 @@ def background_sync_portfolio_prices(portfolio_id: int, max_age_seconds: int = 6
 
         # Phase 2: External network fetch (ZERO DB connections held during external requests)
         tickers = list({row["ticker"] for row in stale_holdings})
-        new_prices = fetch_latest_prices(tickers)
+        new_prices = fetch_latest_prices(tickers, force=force)
 
         # Phase 3: Check out DB connection briefly to apply updates and commit (<1ms)
         conn = get_db_connection()
@@ -558,7 +670,14 @@ def background_sync_portfolio_prices(portfolio_id: int, max_age_seconds: int = 6
             with conn.cursor() as cur:
                 for row in stale_holdings:
                     ticker = row["ticker"]
-                    price = new_prices.get(ticker)
+                    base_t = normalize_ngx_symbol(ticker)
+                    price = (
+                        new_prices.get(ticker) or
+                        new_prices.get(base_t) or
+                        new_prices.get(f"{base_t}.NG") or
+                        get_cached_price(ticker) or
+                        get_cached_price(base_t)
+                    )
                     if price is not None:
                         cur.execute("""
                             UPDATE holdings
@@ -574,6 +693,13 @@ def background_sync_portfolio_prices(portfolio_id: int, max_age_seconds: int = 6
                                 last_price_updated_at = CURRENT_TIMESTAMP
                             WHERE id = %s
                         """, (row["buy_price"], row["id"]))
+                    elif row.get("last_price") is not None and is_ngx_ticker(ticker) and is_kobo_circuit_breaker_active():
+                        # Preserve existing last price and bump timestamp during quota cooldown to prevent tight-loop polling
+                        cur.execute("""
+                            UPDATE holdings
+                            SET last_price_updated_at = CURRENT_TIMESTAMP
+                            WHERE id = %s
+                        """, (row["id"],))
             conn.commit()
             cache.delete(f"data:live_prices:{portfolio_id}")
             cache.delete_by_prefix("data:portfolio_view:")
@@ -628,7 +754,14 @@ def background_sync_user_prices(user_id: int, max_age_seconds: int = 120):
             with conn.cursor() as cur:
                 for row in stale_holdings:
                     ticker = row["ticker"]
-                    price = new_prices.get(ticker)
+                    base_t = normalize_ngx_symbol(ticker)
+                    price = (
+                        new_prices.get(ticker) or
+                        new_prices.get(base_t) or
+                        new_prices.get(f"{base_t}.NG") or
+                        get_cached_price(ticker) or
+                        get_cached_price(base_t)
+                    )
                     if price is not None:
                         cur.execute("""
                             UPDATE holdings

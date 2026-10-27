@@ -12,6 +12,7 @@ from app.services.market import (
     dispatch_background_sync,
     is_ngx_ticker,
     get_ticker_currency,
+    is_kobo_circuit_breaker_active,
 )
 from app.session import flash
 from app.templates_config import render_template
@@ -259,7 +260,13 @@ def refresh_prices(
         cache.delete_by_prefix(f"data:user:{current_user.id}:")
         cache.delete(f"data:live_prices:{portfolio_id}")
         if updated:
-            flash(request, f"Updated market prices for {len(updated)} stocks", "success")
+            ngx_in_portfolio = any(is_ngx_ticker(t) for t in updated.keys())
+            if is_kobo_circuit_breaker_active() and ngx_in_portfolio:
+                flash(request, f"Updated {len(updated)} stocks. Note: Nigerian Exchange (NGX) feed is in daily quota cooldown (resets midnight WAT).", "info")
+            else:
+                flash(request, f"Updated market prices for {len(updated)} stocks", "success")
+        elif is_kobo_circuit_breaker_active():
+            flash(request, "Prices up to date. Nigerian Exchange (NGX) feed is currently on daily quota cooldown (resets midnight WAT).", "info")
         else:
             flash(request, "Prices refreshed successfully", "success")
     except Exception as e:
@@ -333,9 +340,11 @@ def get_portfolio_live_prices(
                 latest_update = ts
             ts_cmp = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
             if (now_utc - ts_cmp).total_seconds() > stale_threshold:
-                needs_sync = True
+                if not (is_ngx and is_kobo_circuit_breaker_active()):
+                    needs_sync = True
         else:
-            needs_sync = True
+            if not (is_ngx and is_kobo_circuit_breaker_active()):
+                needs_sync = True
 
         results.append({
             "id": h['id'],
@@ -377,6 +386,7 @@ def get_portfolio_live_prices(
     payload = {
         "status": "success",
         "last_updated": latest_update.strftime('%H:%M:%S') if latest_update else "Live",
+        "ngx_cooldown": is_kobo_circuit_breaker_active(),
         "summary": {
             "total_holdings": len(results),
             "total_shares": round(total_shares, 2),

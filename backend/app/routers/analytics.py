@@ -4,7 +4,7 @@ from psycopg2.extras import RealDictCursor
 from db import get_db
 from app.dependencies import get_current_user
 from app.services.cache import cache
-from app.services.market import background_sync_user_prices
+from app.services.market import background_sync_user_prices, is_ngx_ticker
 from app.templates_config import render_template
 
 router = APIRouter(tags=["analytics"])
@@ -43,11 +43,20 @@ def analytics(
             """, (current_user.id,))
             holdings = cur.fetchall()
 
-        # ── Compute per-holding market value ──
+        # ── Compute per-holding market value & currency breakdown ──
+        totals_by_currency = {}
         for h in holdings:
-            h['market_value'] = round(h['shares'] * h['last_price'], 2) if h['last_price'] else 0.0
+            curr = h.get('currency') or ('NGN' if is_ngx_ticker(h['ticker']) else 'USD')
+            h['currency'] = curr
+            mv = round(h['shares'] * h['last_price'], 2) if h['last_price'] else 0.0
+            h['market_value'] = mv
+            if curr not in totals_by_currency:
+                totals_by_currency[curr] = {"value": 0.0, "symbol": "₦" if curr == "NGN" else "$"}
+            totals_by_currency[curr]["value"] += mv
 
-        total_value = sum(h['market_value'] for h in holdings)
+        is_mixed_currency = len(totals_by_currency) > 1
+        primary_currency = list(totals_by_currency.keys())[0] if totals_by_currency else "USD"
+        total_value = sum(c["value"] for c in totals_by_currency.values())
         total_holdings = len(holdings)
         unique_tickers = len(set(h['ticker'] for h in holdings))
 
@@ -105,6 +114,9 @@ def analytics(
             "total_value": total_value,
             "total_holdings": total_holdings,
             "unique_tickers": unique_tickers,
+            "totals_by_currency": totals_by_currency,
+            "is_mixed_currency": is_mixed_currency,
+            "primary_currency": primary_currency,
             "portfolio_stats": portfolio_stats,
             "ticker_distribution": ticker_distribution,
             "alert_history": alert_history,

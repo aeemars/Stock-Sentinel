@@ -41,7 +41,7 @@
                 </div>
                 <div class="flex flex-col gap-base mt-2">
                     {% if is_mixed_currency %}
-                        <div class="flex flex-col gap-0.5">
+                        <div id="summary-market-value-mixed" class="flex flex-col gap-0.5">
                             {% for curr, tdata in totals_by_currency.items() %}
                                 {% if tdata.market_value > 0 or tdata.cost > 0 %}
                                     <span class="font-data-mono text-sm font-bold text-on-surface">
@@ -569,6 +569,16 @@ function updatePortfolioDOM(data) {
     if (data.last_updated && document.getElementById('live-timestamp')) {
         document.getElementById('live-timestamp').textContent = data.last_updated;
     }
+    const statusTextEl = document.getElementById('live-status-text');
+    if (statusTextEl) {
+        if (data.ngx_cooldown) {
+            statusTextEl.textContent = 'Feed (NGX Quota Pause)';
+            statusTextEl.title = 'Kobo Terminal daily 100-request quota reached (resets midnight WAT). Global stocks continue live updates.';
+        } else {
+            statusTextEl.textContent = 'Dynamic Feed';
+            statusTextEl.title = 'Live dynamic market prices';
+        }
+    }
 
     // Update Holdings
     if (Array.isArray(data.holdings)) {
@@ -635,25 +645,53 @@ function updatePortfolioDOM(data) {
         });
     }
 
-    // Update Summary cards (if single currency)
-    if (data.summary && !data.summary.is_mixed_currency) {
-        const sumMkt = document.getElementById('summary-market-value');
-        const primarySym = data.summary.primary_currency === 'NGN' ? '₦' : '$';
-        if (sumMkt && data.summary.total_market_value != null) {
-            sumMkt.textContent = `${primarySym}${data.summary.total_market_value.toFixed(2)}`;
-        }
+    // Update Summary cards (single or mixed currency)
+    if (data.summary) {
+        if (data.summary.is_mixed_currency && data.summary.totals_by_currency) {
+            const mixedMktEl = document.getElementById('summary-market-value-mixed');
+            if (mixedMktEl) {
+                let html = '';
+                for (const [curr, tdata] of Object.entries(data.summary.totals_by_currency)) {
+                    if (tdata.market_value > 0 || tdata.cost > 0) {
+                        html += `<span class="font-data-mono text-sm font-bold text-on-surface">${tdata.symbol}${tdata.market_value.toFixed(2)} <span class="text-[10px] text-on-surface-variant font-normal">(${curr})</span></span>`;
+                    }
+                }
+                mixedMktEl.innerHTML = html;
+            }
 
-        const sumPnl = document.getElementById('summary-pnl');
-        const sumPnlPct = document.getElementById('summary-pnl-pct');
-        if (sumPnl && data.summary.total_pnl != null && data.summary.total_cost > 0) {
-            const isPos = data.summary.total_pnl >= 0;
-            const sign = isPos ? '+' : '';
-            sumPnl.className = `font-data-mono text-headline-md ${isPos ? 'text-emerald-400' : 'text-rose-400'}`;
-            sumPnl.textContent = `${primarySym}${sign}${data.summary.total_pnl.toFixed(2)}`;
+            const pnlCard = document.getElementById('summary-pnl-card');
+            if (pnlCard) {
+                let html = '<div class="flex flex-col gap-0.5">';
+                for (const [curr, tdata] of Object.entries(data.summary.totals_by_currency)) {
+                    if (tdata.cost > 0) {
+                        const isPos = tdata.pnl >= 0;
+                        const sign = isPos ? '+' : '';
+                        const color = isPos ? 'text-emerald-400' : 'text-rose-400';
+                        html += `<span class="font-data-mono text-sm font-bold ${color}">${tdata.symbol}${sign}${tdata.pnl.toFixed(2)} <span class="text-[10px] opacity-80">(${sign}${tdata.pnl_pct.toFixed(1)}%)</span></span>`;
+                    }
+                }
+                html += '</div><span id="summary-pnl-pct" class="font-label-caps text-label-caps text-on-surface-variant uppercase">P&L by Currency</span>';
+                pnlCard.innerHTML = html;
+            }
+        } else if (!data.summary.is_mixed_currency) {
+            const sumMkt = document.getElementById('summary-market-value');
+            const primarySym = data.summary.primary_currency === 'NGN' ? '₦' : '$';
+            if (sumMkt && data.summary.total_market_value != null) {
+                sumMkt.textContent = `${primarySym}${data.summary.total_market_value.toFixed(2)}`;
+            }
 
-            if (sumPnlPct && data.summary.total_pnl_pct != null) {
-                sumPnlPct.className = `font-label-caps text-label-caps ${isPos ? 'text-emerald-400/80' : 'text-rose-400/80'} uppercase`;
-                sumPnlPct.textContent = `P&L (${sign}${data.summary.total_pnl_pct.toFixed(1)}%)`;
+            const sumPnl = document.getElementById('summary-pnl');
+            const sumPnlPct = document.getElementById('summary-pnl-pct');
+            if (sumPnl && data.summary.total_pnl != null && data.summary.total_cost > 0) {
+                const isPos = data.summary.total_pnl >= 0;
+                const sign = isPos ? '+' : '';
+                sumPnl.className = `font-data-mono text-headline-md ${isPos ? 'text-emerald-400' : 'text-rose-400'}`;
+                sumPnl.textContent = `${primarySym}${sign}${data.summary.total_pnl.toFixed(2)}`;
+
+                if (sumPnlPct && data.summary.total_pnl_pct != null) {
+                    sumPnlPct.className = `font-label-caps text-label-caps ${isPos ? 'text-emerald-400/80' : 'text-rose-400/80'} uppercase`;
+                    sumPnlPct.textContent = `P&L (${sign}${data.summary.total_pnl_pct.toFixed(1)}%)`;
+                }
             }
         }
     }

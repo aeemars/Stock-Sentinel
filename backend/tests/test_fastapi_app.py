@@ -546,5 +546,62 @@ def test_x_api_key_settings_resolution(monkeypatch):
     assert s.effective_kobo_api_key == "secret_kobo_key_456"
 
 
+def test_fetch_kobo_all_stocks_bulk_payload_mock(monkeypatch):
+    import httpx
+    from unittest.mock import MagicMock
+    from app.services.market import fetch_kobo_all_stocks, get_cached_price
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "stocks": [
+            {"symbol": "SEPLAT", "current_price": 16000.10},
+            {"symbol": "GTCO", "current_price": 125.10},
+            {"symbol": "DANGCEM", "close_price": 1222.10}
+        ]
+    }
+
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.get.return_value = mock_resp
+
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+    results = fetch_kobo_all_stocks(ttl=0, force=True)
+
+    assert results["SEPLAT"] == 16000.10
+    assert results["GTCO"] == 125.10
+    assert results["DANGCEM"] == 1222.10
+    assert get_cached_price("SEPLAT") == 16000.10
+    assert get_cached_price("GTCO.NG") == 125.10
+
+
+def test_fetch_kobo_ticker_price_with_days_param(monkeypatch):
+    import httpx
+    from unittest.mock import MagicMock
+    from app.services.market import fetch_kobo_ticker_price
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "success": True,
+        "symbol": "SEPLAT",
+        "prices": [
+            {"close_price": 16000.10, "open_price": 16000.10}
+        ]
+    }
+
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.get.return_value = mock_resp
+
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+    price = fetch_kobo_ticker_price("SEPLAT", ttl=0, force=True)
+
+    assert price == 16000.10
+    called_url = mock_client.get.call_args[0][0]
+    assert "?days=1" in called_url
+
+
+
 
 

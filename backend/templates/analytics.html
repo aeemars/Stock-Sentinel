@@ -15,7 +15,15 @@
     <div class="grid grid-cols-3 gap-sm sm:flex sm:gap-sm sm:flex-wrap">
         <div class="bg-surface-container-high rounded-lg p-sm border border-outline-variant/20 flex flex-col items-center sm:items-end sm:min-w-[120px]">
             <span class="font-label-caps text-label-caps text-on-surface-variant text-center sm:text-right">Total Value</span>
-            <span class="font-data-mono text-headline-md text-on-surface mt-xs text-sm sm:text-headline-md">${{ "%.2f"|format(total_value) }}</span>
+            {% if is_mixed_currency %}
+                <div class="flex flex-col items-center sm:items-end gap-0.5 mt-xs">
+                    {% for curr, cdata in totals_by_currency.items() %}
+                        <span class="font-data-mono font-bold text-on-surface text-xs sm:text-sm">{{ cdata.symbol }}{{ "%.2f"|format(cdata.value) }} <span class="text-[10px] text-on-surface-variant font-normal">({{ curr }})</span></span>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <span class="font-data-mono text-headline-md text-on-surface mt-xs text-sm sm:text-headline-md">{{ '₦' if primary_currency == 'NGN' else '$' }}{{ "%.2f"|format(total_value) }}</span>
+            {% endif %}
         </div>
         <div class="bg-surface-container-high rounded-lg p-sm border border-outline-variant/20 flex flex-col items-center sm:items-end sm:min-w-[120px]">
             <span class="font-label-caps text-label-caps text-on-surface-variant text-center sm:text-right">Holdings</span>
@@ -51,16 +59,18 @@
             {% if portfolio_stats %}
                 {% set max_count = portfolio_stats|map(attribute='holdings')|max %}
                 {% for ps in portfolio_stats %}
+                {% if loop.index0 % 3 == 0 %}
+                    {% set grad_class = 'from-primary/80 to-primary/40' %}
+                {% elif loop.index0 % 3 == 1 %}
+                    {% set grad_class = 'from-emerald-500/80 to-emerald-500/40' %}
+                {% else %}
+                    {% set grad_class = 'from-amber-500/80 to-amber-500/40' %}
+                {% endif %}
                 <div class="flex items-center">
                     <span class="w-[80px] font-body-sm text-body-sm text-on-surface-variant text-right pr-sm truncate" title="{{ ps.name }}">{{ ps.name }}</span>
                     <div class="flex-1 relative">
-                        <div class="h-9 rounded-r-lg relative group transition-all duration-500 ease-out"
-                             style="width: {{ (ps.holdings / max_count * 100) if max_count > 0 else 0 }}%;
-                                    background: linear-gradient(90deg,
-                                        {% if loop.index0 % 3 == 0 %}rgba(77,142,255,0.8), rgba(77,142,255,0.4)
-                                        {% elif loop.index0 % 3 == 1 %}rgba(0,165,114,0.8), rgba(0,165,114,0.4)
-                                        {% else %}rgba(202,129,0,0.8), rgba(202,129,0,0.4){% endif %});
-                                    min-width: 40px;">
+                        <div class="portfolio-bar h-9 rounded-r-lg relative group transition-all duration-500 ease-out min-w-[40px] bg-gradient-to-r {{ grad_class }}"
+                             data-width="{{ (ps.holdings / max_count * 100) if max_count > 0 else 0 }}">
                             <span class="absolute right-xs top-1/2 -translate-y-1/2 font-data-mono text-label-caps text-white/90 text-xs">
                                 {{ ps.holdings }} · ${{ "%.0f"|format(ps.value) }}
                             </span>
@@ -217,10 +227,23 @@
 {% endblock %}
 
 {% block extra_js %}
+<script type="application/json" id="analytics-ticker-data">
+    {{ ticker_distribution | tojson | safe }}
+</script>
+<script type="application/json" id="analytics-alert-data">
+    {{ alert_history | tojson | safe }}
+</script>
 <script>
 (function() {
+    // ═══ PORTFOLIO BARS ═══
+    document.querySelectorAll('.portfolio-bar').forEach(bar => {
+        const w = bar.getAttribute('data-width') || '0';
+        bar.style.width = w + '%';
+    });
+
     // ═══ DONUT CHART ═══
-    const tickerData = {{ ticker_distribution | tojson }};
+    const tickerEl = document.getElementById('analytics-ticker-data');
+    const tickerData = tickerEl ? JSON.parse(tickerEl.textContent || '[]') : [];
     const COLORS = ['#4d8eff', '#4edea3', '#ffb95f', '#ff6b8a', '#a78bfa', '#38bdf8', '#f472b6', '#34d399'];
     const svg = document.getElementById('donutChart');
     const legend = document.getElementById('donutLegend');
@@ -265,7 +288,8 @@
     }
 
     // ═══ ALERTS LINE CHART ═══
-    const alertData = {{ alert_history | tojson }};
+    const alertEl = document.getElementById('analytics-alert-data');
+    const alertData = alertEl ? JSON.parse(alertEl.textContent || '[]') : [];
     const lineSvg = document.getElementById('alertLineChart');
 
     if (lineSvg && alertData.length > 0) {
