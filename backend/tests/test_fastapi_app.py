@@ -521,6 +521,45 @@ def test_fetch_single_ticker_price_crypto_mock(monkeypatch):
     assert get_cached_price("BTC-USD") == 67500.50
 
 
+def test_live_prices_idor_protection():
+    """Ensure an authenticated user cannot access another user's portfolio live prices even if cached."""
+    from unittest.mock import MagicMock
+    from main import app
+    from db import get_db
+    from app.services.cache import cache, set_cached_user
+    from app.session import dump_session
+    from app.auth import User
+
+    # Mock DB connection where portfolio ownership query returns None (not found / not owned)
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = None
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+    def override_get_db():
+        yield mock_conn
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        # Authenticate as user 888
+        mock_user = User({"id": 888, "username": "victim", "email": "victim@example.com"})
+        set_cached_user(mock_user.id, mock_user)
+        session_cookie = dump_session({"user_id": 888, "_csrf_token": "token888"})
+        client.cookies.set("session", session_cookie)
+
+        # Pre-seed cache as if another user's portfolio 9999 was recently accessed
+        cache.set("data:live_prices:9999", {"status": "leaked", "holdings": [{"ticker": "LEAK"}]})
+        cache.set("data:live_prices:1:9999", {"status": "leaked", "holdings": [{"ticker": "LEAK"}]})
+
+        # Must reject with 404 (portfolio not found / not owned) and NOT return the cached data
+        resp = client.get("/portfolio/9999/live-prices", headers={"accept": "application/json"})
+        assert resp.status_code == 404
+        assert resp.json().get("detail") == "Portfolio not found"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        client.cookies.clear()
+
+
 
 
 

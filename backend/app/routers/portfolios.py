@@ -218,6 +218,7 @@ def delete_portfolio(
         conn.commit()
         # Invalidate user data cache and portfolio live prices cache
         cache.delete_by_prefix(f"data:user:{current_user.id}:")
+        cache.delete(f"data:live_prices:{current_user.id}:{portfolio_id}")
         cache.delete(f"data:live_prices:{portfolio_id}")
         flash(request, f'Portfolio "{portfolio_name}" deleted successfully', "success")
     except Exception as e:
@@ -257,6 +258,7 @@ def refresh_prices(
     try:
         updated = sync_portfolio_prices(portfolio_id, conn, force=True)
         cache.delete_by_prefix(f"data:user:{current_user.id}:")
+        cache.delete(f"data:live_prices:{current_user.id}:{portfolio_id}")
         cache.delete(f"data:live_prices:{portfolio_id}")
         if updated:
             flash(request, f"Updated market prices for {len(updated)} assets", "success")
@@ -276,18 +278,19 @@ def get_portfolio_live_prices(
     current_user=Depends(get_current_user),
     conn=Depends(get_db)
 ):
-    cache_key = f"data:live_prices:{portfolio_id}"
+    # 1. Enforce strict ownership verification BEFORE checking cache or running sync (SEC-IDOR)
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT id FROM portfolios WHERE id = %s AND user_id = %s", (portfolio_id, current_user.id))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    cache_key = f"data:live_prices:{current_user.id}:{portfolio_id}"
 
     # Tier 1 In-Memory Cache: Return within <1ms if cached and not forced
     if not force:
         cached_result = cache.get(cache_key)
         if cached_result is not None:
             return cached_result
-
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT id FROM portfolios WHERE id = %s AND user_id = %s", (portfolio_id, current_user.id))
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail="Portfolio not found")
 
     # If force refresh requested, sync synchronously and invalidate user cache
     if force:

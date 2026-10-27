@@ -82,5 +82,19 @@ class Settings(BaseSettings):
     def is_vercel(self) -> bool:
         return self.is_serverless
 
+    @property
+    def is_production(self) -> bool:
+        return bool(
+            self.ENVIRONMENT in ('production', 'prod', 'render', 'cloudflare', 'serverless', 'vercel')
+            or self.is_render
+            or self.is_serverless
+        )
 
 settings = Settings()
+
+if settings.is_production and settings.SECRET_KEY == "dev-secret-key-change-in-production":
+    import logging
+    logging.getLogger("app.security").critical(
+        "CRITICAL SECURITY CONFIGURATION: Production environment detected with default SECRET_KEY! "
+        "Set a unique, cryptographically secure SECRET_KEY in your environment variables."
+    )

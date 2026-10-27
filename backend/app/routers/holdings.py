@@ -156,6 +156,7 @@ def create_holding(
 
         conn.commit()
         cache.delete_by_prefix(f"data:user:{current_user.id}:")
+        cache.delete(f"data:live_prices:{current_user.id}:{portfolio_id}")
         cache.delete(f"data:live_prices:{portfolio_id}")
 
         unit_label = "units" if is_crypto_ticker(ticker) else "shares"
@@ -196,6 +197,7 @@ def delete_holding(
         conn.commit()
         cache.delete_by_prefix(f"data:user:{current_user.id}:")
         if portfolio_id:
+            cache.delete(f"data:live_prices:{current_user.id}:{portfolio_id}")
             cache.delete(f"data:live_prices:{portfolio_id}")
         flash(request, f"Removed {ticker} from portfolio", "success")
     except Exception as e:

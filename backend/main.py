@@ -8,7 +8,7 @@ from db import init_db
 from scheduler import start_scheduler, stop_scheduler
 from app.config import settings
 from app.session import StockSentinelSessionMiddleware, flash
-from app.dependencies import LoginRequiredException, CSRFValidationException
+from app.dependencies import LoginRequiredException, CSRFValidationException, is_api_request
 from app.templates_config import render_template
 
 from app.routers.auth import router as auth_router
@@ -26,8 +26,13 @@ async def lifespan(app: FastAPI):
     try:
         init_db(settings.effective_database_url)
     except Exception as exc:
-        print(f"❌ DATABASE CONNECTION ERROR: {exc}")
-        print(f"Effective Database URL: {settings.effective_database_url}")
+        try:
+            from urllib.parse import urlsplit
+            parsed = urlsplit(settings.effective_database_url)
+            sanitized_host = parsed.netloc.split('@')[-1] if '@' in parsed.netloc else parsed.netloc
+            print(f"Target Database: {parsed.scheme}://***@{sanitized_host}{parsed.path}")
+        except Exception:
+            print("Database URL could not be parsed.")
         if not settings.is_serverless:
             raise exc
 
@@ -155,14 +160,14 @@ async def csrf_validation_handler(request: Request, exc: CSRFValidationException
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc: StarletteHTTPException):
     # API endpoints receive standard 404 JSON; browser views redirect to dashboard
-    if request.url.path.startswith("/api/"):
+    if is_api_request(request):
         detail = getattr(exc, "detail", "Not Found")
         return JSONResponse(status_code=404, content={"detail": detail})
     return RedirectResponse(url="/dashboard", status_code=303)
 
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc: Exception):
-    if request.url.path.startswith("/api/"):
+    if is_api_request(request):
         return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
     flash(request, "An internal error occurred", "error")
     return RedirectResponse(url="/dashboard", status_code=303)
