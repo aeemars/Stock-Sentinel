@@ -51,7 +51,7 @@
                             {% endfor %}
                         </div>
                     {% else %}
-                        <span id="summary-market-value" class="font-data-mono text-headline-md text-on-surface">{{ '₦' if primary_currency == 'NGN' else '$' }}{{ "%.2f"|format(total_market_value if total_market_value is defined else 0) }}</span>
+                        <span id="summary-market-value" class="font-data-mono text-headline-md text-on-surface">${{ "%.2f"|format(total_market_value if total_market_value is defined else 0) }}</span>
                     {% endif %}
                     <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Market Value</span>
                 </div>
@@ -69,7 +69,7 @@
                         <span id="summary-pnl-pct" class="font-label-caps text-label-caps text-on-surface-variant uppercase">P&L by Currency</span>
                     {% elif total_pnl is defined and total_cost is defined and total_cost > 0 %}
                         <span id="summary-pnl" class="font-data-mono text-headline-md {% if total_pnl >= 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">
-                            {{ '₦' if primary_currency == 'NGN' else '$' }}{{ "%+.2f"|format(total_pnl) }}
+                            ${{ "%+.2f"|format(total_pnl) }}
                         </span>
                         <span id="summary-pnl-pct" class="font-label-caps text-label-caps {% if total_pnl >= 0 %}text-emerald-400/80{% else %}text-rose-400/80{% endif %} uppercase">
                             P&L ({{ "%+.1f"|format(total_pnl_pct) }}%)
@@ -91,21 +91,19 @@
             <form method="POST" action="/portfolio/{{ portfolio.id }}/holding/create" class="flex flex-col gap-md">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div>
-                    <label class="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-xs">Stock Ticker</label>
-                    <input name="ticker" id="input-ticker" required pattern="[a-zA-Z0-9.\-:]{1,20}" class="w-full bg-surface-container-high border-b-2 border-outline-variant/30 text-on-surface font-body-sm text-body-sm px-sm py-sm focus:outline-none focus:border-secondary focus:bg-surface-container-highest transition-all rounded-t-DEFAULT input-glow uppercase" placeholder="e.g., AAPL or DANGCEM.NG" type="text" oninput="updateCurrencyHint(this.value)"/>
-                    <span id="currency-hint" class="text-[11px] text-on-surface-variant mt-1 block">YFinance (USD) or Kobo Terminal (NGN)</span>
+                    <label class="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-xs">Asset Ticker</label>
+                    <input name="ticker" id="input-ticker" required pattern="[a-zA-Z0-9.\-:]{1,20}" class="w-full bg-surface-container-high border-b-2 border-outline-variant/30 text-on-surface font-body-sm text-body-sm px-sm py-sm focus:outline-none focus:border-secondary focus:bg-surface-container-highest transition-all rounded-t-DEFAULT input-glow uppercase" placeholder="e.g., AAPL, MSFT, BTC-USD, ETH-USD" type="text" oninput="updateCurrencyHint(this.value)"/>
+                    <span id="currency-hint" class="text-[11px] text-on-surface-variant mt-1 block">Equities & Crypto via YFinance (USD)</span>
                 </div>
                 <div>
-                    <label class="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-xs">Currency</label>
+                    <label class="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-xs">Asset Class & Currency</label>
                     <select name="currency" id="select-currency" class="w-full bg-surface-container-high border-b-2 border-outline-variant/30 text-on-surface font-body-sm text-body-sm px-sm py-sm focus:outline-none focus:border-secondary focus:bg-surface-container-highest transition-all rounded-t-DEFAULT">
-                        <option value="">Auto-Detect from Ticker</option>
-                        <option value="USD">USD ($ - US & Global Equities)</option>
-                        <option value="NGN">NGN (₦ - Nigerian Exchange)</option>
+                        <option value="USD">USD ($ - Stocks & Crypto)</option>
                     </select>
                 </div>
                 <div>
-                    <label class="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-xs">Number of Shares</label>
-                    <input name="shares" required step="0.01" min="0.01" class="w-full bg-surface-container-high border-b-2 border-outline-variant/30 text-on-surface font-body-sm text-body-sm px-sm py-sm focus:outline-none focus:border-secondary focus:bg-surface-container-highest transition-all rounded-t-DEFAULT input-glow" placeholder="e.g., 100" type="number"/>
+                    <label class="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-xs">Quantity / Shares</label>
+                    <input name="shares" required step="0.0001" min="0.0001" class="w-full bg-surface-container-high border-b-2 border-outline-variant/30 text-on-surface font-body-sm text-body-sm px-sm py-sm focus:outline-none focus:border-secondary focus:bg-surface-container-highest transition-all rounded-t-DEFAULT input-glow" placeholder="e.g., 100 or 0.25" type="number"/>
                 </div>
                 <div>
                     <label class="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-xs flex justify-between items-center">
@@ -114,7 +112,7 @@
                     </label>
                     <div class="relative">
                         <span id="buy-price-curr-sym" class="absolute inset-y-0 left-0 pl-sm flex items-center text-on-surface-variant font-data-mono text-body-sm">$</span>
-                        <input name="buy_price" step="0.01" min="0.01" class="w-full bg-surface-container-high border-b-2 border-outline-variant/30 text-on-surface font-body-sm text-body-sm pl-7 pr-sm py-sm focus:outline-none focus:border-secondary focus:bg-surface-container-highest transition-all rounded-t-DEFAULT input-glow" placeholder="e.g., 185.50 or 285.00" type="number"/>
+                        <input name="buy_price" step="0.01" min="0.01" class="w-full bg-surface-container-high border-b-2 border-outline-variant/30 text-on-surface font-body-sm text-body-sm pl-7 pr-sm py-sm focus:outline-none focus:border-secondary focus:bg-surface-container-highest transition-all rounded-t-DEFAULT input-glow" placeholder="e.g., 185.50 or 65000.00" type="number"/>
                     </div>
                 </div>
                 <button type="submit" class="w-full mt-sm py-sm rounded-lg border border-secondary/50 text-secondary font-body-sm text-body-sm font-semibold hover:bg-secondary/10 transition-colors flex justify-center items-center gap-xs">
@@ -234,8 +232,8 @@
                                             {{ holding.ticker[:2] }}
                                         </div>
                                         <span class="font-data-mono text-body-lg font-bold text-on-surface">{{ holding.ticker }}</span>
-                                        {% if holding.currency == 'NGN' %}
-                                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">NGN</span>
+                                        {% if holding.is_crypto or holding.asset_type == 'crypto' %}
+                                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">🪙 CRYPTO</span>
                                         {% endif %}
                                     </div>
                                 </td>
@@ -244,21 +242,21 @@
                                 </td>
                                 <td class="px-md py-sm">
                                     {% if holding.buy_price %}
-                                        <span class="font-data-mono text-body-sm text-on-surface">{{ '₦' if holding.currency == 'NGN' else '$' }}{{ "%.2f"|format(holding.buy_price) }}</span>
+                                        <span class="font-data-mono text-body-sm text-on-surface">${{ "%.2f"|format(holding.buy_price) }}</span>
                                     {% else %}
                                         <span class="font-data-mono text-label-caps text-on-surface-variant">&mdash;</span>
                                     {% endif %}
                                 </td>
                                 <td class="px-md py-sm">
                                     {% if holding.last_price %}
-                                        <span id="price-{{ holding.id }}" data-currency="{{ holding.currency }}" class="font-data-mono text-body-sm text-primary transition-all duration-300 px-1 py-0.5 rounded">{{ '₦' if holding.currency == 'NGN' else '$' }}{{ "%.2f"|format(holding.last_price) }}</span>
+                                        <span id="price-{{ holding.id }}" data-currency="{{ holding.currency }}" class="font-data-mono text-body-sm text-primary transition-all duration-300 px-1 py-0.5 rounded">${{ "%.2f"|format(holding.last_price) }}</span>
                                     {% else %}
                                         <span id="price-{{ holding.id }}" data-currency="{{ holding.currency }}" class="font-data-mono text-label-caps text-on-surface-variant px-1 py-0.5 rounded">&mdash;</span>
                                     {% endif %}
                                 </td>
                                 <td class="px-md py-sm">
                                     {% if holding.market_value %}
-                                        <span id="mktval-{{ holding.id }}" data-currency="{{ holding.currency }}" class="font-data-mono text-body-sm text-secondary font-semibold transition-all duration-300 px-1 py-0.5 rounded">{{ '₦' if holding.currency == 'NGN' else '$' }}{{ "%.2f"|format(holding.market_value) }}</span>
+                                        <span id="mktval-{{ holding.id }}" data-currency="{{ holding.currency }}" class="font-data-mono text-body-sm text-secondary font-semibold transition-all duration-300 px-1 py-0.5 rounded">${{ "%.2f"|format(holding.market_value) }}</span>
                                     {% else %}
                                         <span id="mktval-{{ holding.id }}" data-currency="{{ holding.currency }}" class="font-data-mono text-label-caps text-on-surface-variant px-1 py-0.5 rounded">&mdash;</span>
                                     {% endif %}
@@ -268,7 +266,7 @@
                                         {% if holding.pnl is not none %}
                                             <div class="flex flex-col">
                                                 <span class="font-data-mono text-body-sm font-semibold {% if holding.pnl >= 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">
-                                                    {{ '₦' if holding.currency == 'NGN' else '$' }}{{ "%+.2f"|format(holding.pnl) }}
+                                                    ${{ "%+.2f"|format(holding.pnl) }}
                                                 </span>
                                                 <span class="font-data-mono text-xs {% if holding.pnl >= 0 %}text-emerald-400/80{% else %}text-rose-400/80{% endif %}">
                                                     ({{ "%+.2f"|format(holding.pnl_pct) }}%)
@@ -382,8 +380,8 @@
                             </div>
                             <div>
                                 <span class="font-data-mono text-body-lg font-bold text-on-surface">{{ holding.ticker }}</span>
-                                {% if holding.currency == 'NGN' %}
-                                    <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">NGN</span>
+                                {% if holding.is_crypto or holding.asset_type == 'crypto' %}
+                                    <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">🪙 CRYPTO</span>
                                 {% endif %}
                                 <div class="font-data-mono text-label-caps text-on-surface-variant">{{ holding.created_at.strftime('%Y-%m-%d') if holding.created_at else '' }}</div>
                             </div>
@@ -402,13 +400,13 @@
                     </div>
                     <div class="grid grid-cols-2 gap-sm">
                         <div>
-                            <span class="font-label-caps text-label-caps text-on-surface-variant block">Shares</span>
+                            <span class="font-label-caps text-label-caps text-on-surface-variant block">Units / Shares</span>
                             <span class="font-data-mono text-body-sm text-secondary">{{ holding.shares }}</span>
                         </div>
                         <div>
                             <span class="font-label-caps text-label-caps text-on-surface-variant block">Buy Price</span>
                             {% if holding.buy_price %}
-                                <span class="font-data-mono text-body-sm text-on-surface">{{ '₦' if holding.currency == 'NGN' else '$' }}{{ "%.2f"|format(holding.buy_price) }}</span>
+                                <span class="font-data-mono text-body-sm text-on-surface">${{ "%.2f"|format(holding.buy_price) }}</span>
                             {% else %}
                                 <span class="text-on-surface-variant">&mdash;</span>
                             {% endif %}
@@ -417,7 +415,7 @@
                             <span class="font-label-caps text-label-caps text-on-surface-variant block">Market Price</span>
                             <span id="mobile-price-{{ holding.id }}" data-currency="{{ holding.currency }}" class="font-data-mono text-body-sm text-primary transition-all duration-300">
                                 {% if holding.last_price %}
-                                    {{ '₦' if holding.currency == 'NGN' else '$' }}{{ "%.2f"|format(holding.last_price) }}
+                                    ${{ "%.2f"|format(holding.last_price) }}
                                 {% else %}
                                     &mdash;
                                 {% endif %}
@@ -427,7 +425,7 @@
                             <span class="font-label-caps text-label-caps text-on-surface-variant block">Mkt Value</span>
                             <span id="mobile-mktval-{{ holding.id }}" data-currency="{{ holding.currency }}" class="font-data-mono text-body-sm text-secondary font-semibold">
                                 {% if holding.market_value %}
-                                    {{ '₦' if holding.currency == 'NGN' else '$' }}{{ "%.2f"|format(holding.market_value) }}
+                                    ${{ "%.2f"|format(holding.market_value) }}
                                 {% else %}
                                     &mdash;
                                 {% endif %}
@@ -438,7 +436,7 @@
                             <div id="mobile-pnl-{{ holding.id }}" data-currency="{{ holding.currency }}">
                                 {% if holding.pnl is not none %}
                                     <span class="font-data-mono text-body-sm font-semibold {% if holding.pnl >= 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">
-                                        {{ '₦' if holding.currency == 'NGN' else '$' }}{{ "%+.2f"|format(holding.pnl) }} ({{ "%+.1f"|format(holding.pnl_pct) }}%)
+                                        ${{ "%+.2f"|format(holding.pnl) }} ({{ "%+.1f"|format(holding.pnl_pct) }}%)
                                     </span>
                                 {% else %}
                                     <span class="text-on-surface-variant">&mdash;</span>
@@ -571,13 +569,8 @@ function updatePortfolioDOM(data) {
     }
     const statusTextEl = document.getElementById('live-status-text');
     if (statusTextEl) {
-        if (data.ngx_cooldown) {
-            statusTextEl.textContent = 'Feed (NGX Quota Pause)';
-            statusTextEl.title = 'Kobo Terminal daily 100-request quota reached (resets midnight WAT). Global stocks continue live updates.';
-        } else {
-            statusTextEl.textContent = 'Dynamic Feed';
-            statusTextEl.title = 'Live dynamic market prices';
-        }
+        statusTextEl.textContent = 'Dynamic Feed';
+        statusTextEl.title = 'Live dynamic market prices via Yahoo Finance';
     }
 
     // Update Holdings
@@ -589,7 +582,7 @@ function updatePortfolioDOM(data) {
             const pnlWrap = document.getElementById(`pnl-wrapper-${holding.id}`);
             const mobilePnlWrap = document.getElementById(`mobile-pnl-${holding.id}`);
 
-            const sym = (holding.currency === 'NGN' || holding.currency_symbol === '₦') ? '₦' : '$';
+            const sym = '$';
             if (holding.last_price != null) {
                 const newPriceFormatted = `${sym}${holding.last_price.toFixed(2)}`;
                 if (priceEl) {
@@ -675,7 +668,7 @@ function updatePortfolioDOM(data) {
             }
         } else if (!data.summary.is_mixed_currency) {
             const sumMkt = document.getElementById('summary-market-value');
-            const primarySym = data.summary.primary_currency === 'NGN' ? '₦' : '$';
+            const primarySym = '$';
             if (sumMkt && data.summary.total_market_value != null) {
                 sumMkt.textContent = `${primarySym}${data.summary.total_market_value.toFixed(2)}`;
             }
@@ -700,20 +693,16 @@ function updatePortfolioDOM(data) {
 function updateCurrencyHint(val) {
     if (!val) return;
     const clean = val.trim().toUpperCase();
-    const isNgx = clean.endsWith('.NG') || clean.endsWith('.LG') || clean.startsWith('NGX:') ||
-        ['DANGCEM', 'MTNN', 'ZENITHBANK', 'GTCO', 'ACCESSCORP', 'UBA', 'FBNH', 'SEPLAT', 'NESTLE', 'PRESCO', 'OKOMUOIL', 'BUAFOODS', 'BUACEMENT', 'TRANSCORP', 'GEREGU', 'WAPCO'].includes(clean);
-    const sel = document.getElementById('select-currency');
+    const CRYPTO_BASES = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'ADA', 'AVAX', 'DOT', 'MATIC', 'LINK', 'UNI', 'SHIB', 'LTC', 'BCH', 'ATOM', 'FIL', 'APT', 'ARB', 'OP', 'NEAR', 'ALGO', 'AAVE', 'CRO', 'MANA', 'SAND', 'AXS', 'FTM', 'HBAR', 'ICP', 'VET', 'EOS', 'XLM', 'TRX', 'BNB', 'PEPE', 'SUI'];
+    const isCrypto = clean.includes('-USD') || clean.includes('-EUR') || clean.includes('-USDT') || CRYPTO_BASES.includes(clean.replace(/-USD$/, ''));
     const symEl = document.getElementById('buy-price-curr-sym');
     const hintEl = document.getElementById('currency-hint');
 
-    if (isNgx) {
-        if (symEl) symEl.textContent = '₦';
-        if (sel) sel.value = 'NGN';
-        if (hintEl) hintEl.textContent = 'Detected Nigerian Exchange stock (Kobo Terminal / NGN)';
+    if (symEl) symEl.textContent = '$';
+    if (isCrypto) {
+        if (hintEl) hintEl.textContent = '🪙 Detected Cryptocurrency (24/7 YFinance feed)';
     } else if (clean.length > 0) {
-        if (symEl) symEl.textContent = '$';
-        if (sel) sel.value = 'USD';
-        if (hintEl) hintEl.textContent = 'Detected US / Global equity (YFinance / USD)';
+        if (hintEl) hintEl.textContent = 'Detected Equity Stock (YFinance)';
     }
 }
 
@@ -722,7 +711,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sel) {
         sel.addEventListener('change', (e) => {
             const symEl = document.getElementById('buy-price-curr-sym');
-            if (symEl) symEl.textContent = e.target.value === 'NGN' ? '₦' : '$';
+            if (symEl) symEl.textContent = '$';
         });
     }
 });

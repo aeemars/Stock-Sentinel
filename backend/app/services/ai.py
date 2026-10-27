@@ -49,8 +49,9 @@ For EACH holding, return a JSON object with these exact keys:
 - "reasoning": string (2-3 bullet points as a single string, each starting with •)
 
 Guidelines:
-- Nigerian Exchange (NGX) stocks are denominated in Nigerian Naira (₦/NGN) and US equities in USD ($).
-- If current quote is syncing or tracking near entry, evaluate constructively based on the recorded entry price and business fundamentals rather than declining to assess.
+- All holdings are denominated in USD ($).
+- For cryptocurrency assets (e.g. BTC-USD, ETH-USD, SOL-USD), account for 24/7 trading cycles, higher historical volatility, and standard crypto market risk dynamics.
+- If current quote is syncing or tracking near entry, evaluate constructively based on the recorded entry price and business/protocol fundamentals rather than declining to assess.
 
 Respond ONLY with a valid JSON array. No markdown, no explanation outside the JSON."""
 
@@ -63,8 +64,7 @@ def _simulate_analysis(holdings_data: List[Dict[str, Any]]) -> List[Dict[str, An
         buy = h.get("buy_price")
         current = h.get("last_price")
         pnl_pct = h.get("pnl_pct")
-        currency = h.get("currency", "USD")
-        curr_sym = "₦" if currency == "NGN" else "$"
+        curr_sym = "$"
 
         # Fallback current to buy if current quote is temporarily syncing
         effective_current = current if current is not None else buy

@@ -22,7 +22,7 @@
                     {% endfor %}
                 </div>
             {% else %}
-                <span class="font-data-mono text-headline-md text-on-surface mt-xs text-sm sm:text-headline-md">{{ '₦' if primary_currency == 'NGN' else '$' }}{{ "%.2f"|format(total_value) }}</span>
+                <span class="font-data-mono text-headline-md text-on-surface mt-xs text-sm sm:text-headline-md">${{ "%.2f"|format(total_value) }}</span>
             {% endif %}
         </div>
         <div class="bg-surface-container-high rounded-lg p-sm border border-outline-variant/20 flex flex-col items-center sm:items-end sm:min-w-[120px]">
@@ -139,6 +139,9 @@
                                     {{ h.ticker[:2] }}
                                 </div>
                                 <span class="font-data-mono text-body-lg font-bold text-on-surface">{{ h.ticker }}</span>
+                                {% if h.is_crypto or h.asset_type == 'crypto' %}
+                                    <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">🪙 CRYPTO</span>
+                                {% endif %}
                             </div>
                         </td>
                         <td class="px-md py-sm font-body-sm text-on-surface-variant">{{ h.portfolio_name }}</td>
@@ -147,13 +150,13 @@
                         </td>
                         <td class="px-md py-sm text-right">
                             {% if h.last_price %}
-                            <span class="font-data-mono text-body-sm text-primary">{{ '₦' if h.currency == 'NGN' else '$' }}{{ "%.2f"|format(h.last_price) }}</span>
+                            <span class="font-data-mono text-body-sm text-primary">${{ "%.2f"|format(h.last_price) }}</span>
                             {% else %}
                             <span class="font-data-mono text-label-caps text-on-surface-variant">&mdash;</span>
                             {% endif %}
                         </td>
                         <td class="px-md py-sm text-right">
-                            <span class="font-data-mono text-body-sm text-secondary">{{ '₦' if h.currency == 'NGN' else '$' }}{{ "%.2f"|format(h.market_value) }}</span>
+                            <span class="font-data-mono text-body-sm text-secondary">${{ "%.2f"|format(h.market_value) }}</span>
                         </td>
                         <td class="px-md py-sm text-right">
                             {% if total_value > 0 %}
@@ -179,11 +182,14 @@
                         </div>
                         <div>
                             <span class="font-data-mono text-body-lg font-bold text-on-surface">{{ h.ticker }}</span>
+                            {% if h.is_crypto or h.asset_type == 'crypto' %}
+                                <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">🪙 CRYPTO</span>
+                            {% endif %}
                             <div class="font-body-sm text-[11px] text-on-surface-variant">{{ h.portfolio_name }}</div>
                         </div>
                     </div>
                     <div class="text-right">
-                        <span class="font-data-mono text-body-sm text-secondary font-semibold block">{{ '₦' if h.currency == 'NGN' else '$' }}{{ "%.2f"|format(h.market_value) }}</span>
+                        <span class="font-data-mono text-body-sm text-secondary font-semibold block">${{ "%.2f"|format(h.market_value) }}</span>
                         {% if total_value > 0 %}
                         <span class="font-data-mono text-[11px] text-on-surface-variant">{{ "%.1f"|format(h.market_value / total_value * 100) }}% of total</span>
                         {% endif %}
@@ -197,7 +203,7 @@
                     <div>
                         <span class="text-on-surface-variant">Price</span>
                         {% if h.last_price %}
-                        <span class="font-data-mono text-primary ml-1">{{ '₦' if h.currency == 'NGN' else '$' }}{{ "%.2f"|format(h.last_price) }}</span>
+                        <span class="font-data-mono text-primary ml-1">${{ "%.2f"|format(h.last_price) }}</span>
                         {% else %}
                         <span class="text-on-surface-variant ml-1">&mdash;</span>
                         {% endif %}

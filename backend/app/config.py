@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 from typing import Optional
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # backend directory
@@ -31,10 +30,7 @@ class Settings(BaseSettings):
     OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 
-    # Kobo Terminal Nigerian Stock Market API (NGN)
-    # Auth variable referenced as X-API-KEY per Kobo Terminal specification
-    X_API_KEY: Optional[str] = Field(default=None, alias="X-API-KEY")
-    KOBO_TERMINAL_BASE_URL: str = "https://koboterminal.com"
+
     ENVIRONMENT: Optional[str] = None
     RENDER: Optional[str] = None
     VERCEL: Optional[str] = None
@@ -86,13 +82,5 @@ class Settings(BaseSettings):
     def is_vercel(self) -> bool:
         return self.is_serverless
 
-    @property
-    def effective_kobo_api_key(self) -> Optional[str]:
-        return (
-            self.X_API_KEY
-            or os.getenv("X-API-KEY")
-            or os.getenv("X_API_KEY")
-            or os.getenv("KOBO_TERMINAL_API_KEY")
-        )
 
 settings = Settings()

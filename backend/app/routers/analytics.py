@@ -4,7 +4,7 @@ from psycopg2.extras import RealDictCursor
 from db import get_db
 from app.dependencies import get_current_user
 from app.services.cache import cache
-from app.services.market import background_sync_user_prices, is_ngx_ticker
+from app.services.market import background_sync_user_prices, is_crypto_ticker, get_asset_type
 from app.templates_config import render_template
 
 router = APIRouter(tags=["analytics"])
@@ -46,12 +46,14 @@ def analytics(
         # ── Compute per-holding market value & currency breakdown ──
         totals_by_currency = {}
         for h in holdings:
-            curr = h.get('currency') or ('NGN' if is_ngx_ticker(h['ticker']) else 'USD')
+            curr = h.get('currency') or 'USD'
             h['currency'] = curr
+            h['is_crypto'] = is_crypto_ticker(h['ticker'])
+            h['asset_type'] = get_asset_type(h['ticker'])
             mv = round(h['shares'] * h['last_price'], 2) if h['last_price'] else 0.0
             h['market_value'] = mv
             if curr not in totals_by_currency:
-                totals_by_currency[curr] = {"value": 0.0, "symbol": "₦" if curr == "NGN" else "$"}
+                totals_by_currency[curr] = {"value": 0.0, "symbol": "$"}
             totals_by_currency[curr]["value"] += mv
 
         is_mixed_currency = len(totals_by_currency) > 1

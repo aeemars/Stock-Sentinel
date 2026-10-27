@@ -469,137 +469,56 @@ def test_cloudflare_https_cookie_detection():
         settings.ENVIRONMENT = orig_env
 
 
-def test_is_ngx_ticker_and_currency_resolution():
+def test_crypto_ticker_detection_and_normalization():
     from app.services.market import (
-        is_ngx_ticker,
+        is_crypto_ticker,
+        normalize_crypto_ticker,
+        get_asset_type,
         get_ticker_currency,
-        normalize_ngx_symbol,
     )
-    assert is_ngx_ticker("DANGCEM") is True
-    assert is_ngx_ticker("MTNN.NG") is True
-    assert is_ngx_ticker("ZENITHBANK.LG") is True
-    assert is_ngx_ticker("NGX:GTCO") is True
-    assert is_ngx_ticker("AAPL") is False
-    assert is_ngx_ticker("TSLA") is False
+    # Crypto tickers detection
+    assert is_crypto_ticker("BTC-USD") is True
+    assert is_crypto_ticker("ETH-USD") is True
+    assert is_crypto_ticker("SOL-EUR") is True
+    assert is_crypto_ticker("BTC") is True
+    assert is_crypto_ticker("ETH") is True
+    assert is_crypto_ticker("DOGE") is True
+    assert is_crypto_ticker("AAPL") is False
+    assert is_crypto_ticker("MSFT") is False
+    assert is_crypto_ticker("") is False
 
-    assert get_ticker_currency("DANGCEM") == "NGN"
-    assert get_ticker_currency("DANGCEM.NG") == "NGN"
+    # Normalization
+    assert normalize_crypto_ticker("BTC") == "BTC-USD"
+    assert normalize_crypto_ticker("ETH") == "ETH-USD"
+    assert normalize_crypto_ticker("SOL") == "SOL-USD"
+    assert normalize_crypto_ticker("BTC-USD") == "BTC-USD"
+    assert normalize_crypto_ticker("AAPL") == "AAPL"
+
+    # Asset type
+    assert get_asset_type("BTC") == "crypto"
+    assert get_asset_type("BTC-USD") == "crypto"
+    assert get_asset_type("AAPL") == "stock"
+
+    # Currency
+    assert get_ticker_currency("BTC-USD") == "USD"
     assert get_ticker_currency("AAPL") == "USD"
 
-    assert normalize_ngx_symbol("DANGCEM.NG") == "DANGCEM"
-    assert normalize_ngx_symbol("NGX:MTNN") == "MTNN"
-    assert normalize_ngx_symbol("ZENITHBANK.LG") == "ZENITHBANK"
 
-
-def test_fetch_kobo_ticker_price_mock(monkeypatch):
-    import httpx
+def test_fetch_single_ticker_price_crypto_mock(monkeypatch):
     from unittest.mock import MagicMock
-    from app.services.market import fetch_kobo_ticker_price, get_cached_price
+    import yfinance as yf
+    from app.services.market import fetch_single_ticker_price, get_cached_price
 
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    # Official Kobo Terminal JSON payload structure
-    mock_resp.json.return_value = {
-        "symbol": "DANGCEM",
-        "name": "Dangote Cement Plc",
-        "current_price": 665.00,
-        "change_percent": 2.31,
-        "volume": 1245890
-    }
+    mock_ticker = MagicMock()
+    mock_ticker.fast_info = {"lastPrice": 67500.50}
 
-    mock_client = MagicMock()
-    mock_client.__enter__.return_value = mock_client
-    mock_client.get.return_value = mock_resp
+    monkeypatch.setattr(yf, "Ticker", MagicMock(return_value=mock_ticker))
 
-    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
-    monkeypatch.setenv("X-API-KEY", "kobo_test_key_123")
-
-    price = fetch_kobo_ticker_price("DANGCEM.NG", ttl=0)
-    assert price == 665.00
-    assert get_cached_price("DANGCEM.NG") == 665.00
-    assert get_cached_price("DANGCEM") == 665.00
-
-    # Verify official endpoint was called with X-API-Key header
-    called_url = mock_client.get.call_args[0][0]
-    called_headers = mock_client.get.call_args[1]["headers"]
-    assert "/api/ngxdata/prices/DANGCEM" in called_url
-    assert called_headers["X-API-Key"] == "kobo_test_key_123"
-
-
-def test_fetch_single_ticker_price_routing(monkeypatch):
-    from unittest.mock import MagicMock
-    import app.services.market as market_mod
-
-    kobo_mock = MagicMock(return_value=290.0)
-    monkeypatch.setattr(market_mod, "fetch_kobo_ticker_price", kobo_mock)
-
-    # Calling NGX ticker should invoke Kobo Terminal provider
-    p_ngx = market_mod.fetch_single_ticker_price("MTNN.NG", ttl=0)
-    assert p_ngx == 290.0
-    kobo_mock.assert_called_once()
-
-
-def test_x_api_key_settings_resolution(monkeypatch):
-    from app.config import Settings
-    monkeypatch.setenv("X-API-KEY", "secret_kobo_key_456")
-    s = Settings()
-    assert s.effective_kobo_api_key == "secret_kobo_key_456"
-
-
-def test_fetch_kobo_all_stocks_bulk_payload_mock(monkeypatch):
-    import httpx
-    from unittest.mock import MagicMock
-    from app.services.market import fetch_kobo_all_stocks, get_cached_price
-
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "stocks": [
-            {"symbol": "SEPLAT", "current_price": 16000.10},
-            {"symbol": "GTCO", "current_price": 125.10},
-            {"symbol": "DANGCEM", "close_price": 1222.10}
-        ]
-    }
-
-    mock_client = MagicMock()
-    mock_client.__enter__.return_value = mock_client
-    mock_client.get.return_value = mock_resp
-
-    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
-    results = fetch_kobo_all_stocks(ttl=0, force=True)
-
-    assert results["SEPLAT"] == 16000.10
-    assert results["GTCO"] == 125.10
-    assert results["DANGCEM"] == 1222.10
-    assert get_cached_price("SEPLAT") == 16000.10
-    assert get_cached_price("GTCO.NG") == 125.10
-
-
-def test_fetch_kobo_ticker_price_with_days_param(monkeypatch):
-    import httpx
-    from unittest.mock import MagicMock
-    from app.services.market import fetch_kobo_ticker_price
-
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "success": True,
-        "symbol": "SEPLAT",
-        "prices": [
-            {"close_price": 16000.10, "open_price": 16000.10}
-        ]
-    }
-
-    mock_client = MagicMock()
-    mock_client.__enter__.return_value = mock_client
-    mock_client.get.return_value = mock_resp
-
-    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
-    price = fetch_kobo_ticker_price("SEPLAT", ttl=0, force=True)
-
-    assert price == 16000.10
-    called_url = mock_client.get.call_args[0][0]
-    assert "?days=1" in called_url
+    # Fetching bare BTC should normalize to BTC-USD and query YFinance
+    price = fetch_single_ticker_price("BTC", ttl=0, force=True)
+    assert price == 67500.50
+    assert get_cached_price("BTC") == 67500.50
+    assert get_cached_price("BTC-USD") == 67500.50
 
 
 

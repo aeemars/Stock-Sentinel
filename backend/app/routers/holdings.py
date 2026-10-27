@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse
 from psycopg2.extras import RealDictCursor
 from db import get_db
 from app.services.cache import cache
-from app.services.market import fetch_single_ticker_price, get_ticker_currency, is_ngx_ticker
+from app.services.market import fetch_single_ticker_price, normalize_crypto_ticker, is_crypto_ticker
 from app.dependencies import get_current_user, verify_csrf
 from app.session import flash
 
@@ -25,6 +25,7 @@ def create_holding(
     conn=Depends(get_db)
 ):
     ticker = ticker.strip().upper()
+    ticker = normalize_crypto_ticker(ticker)
     shares_str = shares.strip()
     buy_price_str = buy_price.strip() if buy_price else ""
 
@@ -33,7 +34,7 @@ def create_holding(
         return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
 
     if not TICKER_REGEX.match(ticker):
-        flash(request, "Invalid ticker symbol format. Use 1-20 alphanumeric characters (e.g. AAPL, DANGCEM.NG).", "error")
+        flash(request, "Invalid ticker symbol format. Use 1-20 alphanumeric characters (e.g. AAPL, BTC-USD).", "error")
         return RedirectResponse(url=str(request.url_for("view_portfolio", portfolio_id=portfolio_id)), status_code=303)
 
     try:
@@ -124,7 +125,7 @@ def create_holding(
                 ))
                 holding_id = existing_row['id']
             else:
-                resolved_currency = currency.strip().upper() if currency and currency.strip().upper() in ("USD", "NGN") else get_ticker_currency(ticker)
+                resolved_currency = "USD"
                 initial_last_price = market_price if market_price is not None else entry_price
                 cur.execute("""
                     INSERT INTO holdings (portfolio_id, ticker, shares, buy_price, currency, last_price, last_price_updated_at)
@@ -157,9 +158,9 @@ def create_holding(
         cache.delete_by_prefix(f"data:user:{current_user.id}:")
         cache.delete(f"data:live_prices:{portfolio_id}")
 
-        curr_sym = "₦" if (currency.strip().upper() == "NGN" or is_ngx_ticker(ticker)) else "$"
-        price_str = f" @ {curr_sym}{entry_price:.2f}" if entry_price is not None else ""
-        flash(request, f"Added {shares_val} shares of {ticker}{price_str} to portfolio", "success")
+        unit_label = "units" if is_crypto_ticker(ticker) else "shares"
+        price_str = f" @ ${entry_price:.2f}" if entry_price is not None else ""
+        flash(request, f"Added {shares_val} {unit_label} of {ticker}{price_str} to portfolio", "success")
     except Exception as e:
         conn.rollback()
         flash(request, f"Error adding holding: {str(e)}", "error")

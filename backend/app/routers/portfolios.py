@@ -10,9 +10,8 @@ from app.services.market import (
     background_sync_portfolio_prices,
     calculate_holding_metrics,
     dispatch_background_sync,
-    is_ngx_ticker,
-    get_ticker_currency,
-    is_kobo_circuit_breaker_active,
+    is_crypto_ticker,
+    get_asset_type,
 )
 from app.session import flash
 from app.templates_config import render_template
@@ -98,13 +97,14 @@ def view_portfolio(
 
         totals_by_currency = {
             "USD": {"cost": 0.0, "market_value": 0.0, "pnl": 0.0, "pnl_pct": 0.0, "symbol": "$"},
-            "NGN": {"cost": 0.0, "market_value": 0.0, "pnl": 0.0, "pnl_pct": 0.0, "symbol": "₦"},
         }
 
         for holding in holdings:
             holding['history'] = snapshots_by_holding.get(holding['id'], [])
-            curr = holding.get('currency') or get_ticker_currency(holding['ticker'])
+            curr = holding.get('currency') or 'USD'
             holding['currency'] = curr
+            holding['is_crypto'] = is_crypto_ticker(holding['ticker'])
+            holding['asset_type'] = get_asset_type(holding['ticker'])
 
             metrics = calculate_holding_metrics(holding)
             holding.update(metrics)
@@ -118,8 +118,7 @@ def view_portfolio(
             totals_by_currency[curr]["market_value"] += metrics["market_value"]
 
             ts = holding.get('last_price_updated_at')
-            is_ngx = (curr == "NGN") or is_ngx_ticker(holding['ticker'])
-            stale_threshold = 900 if is_ngx else 60
+            stale_threshold = 60
             if ts:
                 if last_updated_at is None or ts > last_updated_at:
                     last_updated_at = ts
@@ -260,13 +259,7 @@ def refresh_prices(
         cache.delete_by_prefix(f"data:user:{current_user.id}:")
         cache.delete(f"data:live_prices:{portfolio_id}")
         if updated:
-            ngx_in_portfolio = any(is_ngx_ticker(t) for t in updated.keys())
-            if is_kobo_circuit_breaker_active() and ngx_in_portfolio:
-                flash(request, f"Updated {len(updated)} stocks. Note: Nigerian Exchange (NGX) feed is in daily quota cooldown (resets midnight WAT).", "info")
-            else:
-                flash(request, f"Updated market prices for {len(updated)} stocks", "success")
-        elif is_kobo_circuit_breaker_active():
-            flash(request, "Prices up to date. Nigerian Exchange (NGX) feed is currently on daily quota cooldown (resets midnight WAT).", "info")
+            flash(request, f"Updated market prices for {len(updated)} assets", "success")
         else:
             flash(request, "Prices refreshed successfully", "success")
     except Exception as e:
@@ -318,11 +311,10 @@ def get_portfolio_live_prices(
 
     totals_by_currency = {
         "USD": {"cost": 0.0, "market_value": 0.0, "pnl": 0.0, "pnl_pct": 0.0, "symbol": "$"},
-        "NGN": {"cost": 0.0, "market_value": 0.0, "pnl": 0.0, "pnl_pct": 0.0, "symbol": "₦"},
     }
 
     for h in holdings:
-        curr = h.get('currency') or get_ticker_currency(h['ticker'])
+        curr = h.get('currency') or 'USD'
         metrics = calculate_holding_metrics(h)
         total_cost += metrics['cost_basis']
         total_market_value += metrics['market_value']
@@ -333,24 +325,23 @@ def get_portfolio_live_prices(
         totals_by_currency[curr]["market_value"] += metrics["market_value"]
 
         ts = h.get('last_price_updated_at')
-        is_ngx = (curr == "NGN") or is_ngx_ticker(h['ticker'])
-        stale_threshold = 900 if is_ngx else 30
+        stale_threshold = 30
         if ts:
             if latest_update is None or ts > latest_update:
                 latest_update = ts
             ts_cmp = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
             if (now_utc - ts_cmp).total_seconds() > stale_threshold:
-                if not (is_ngx and is_kobo_circuit_breaker_active()):
-                    needs_sync = True
-        else:
-            if not (is_ngx and is_kobo_circuit_breaker_active()):
                 needs_sync = True
+        else:
+            needs_sync = True
 
         results.append({
             "id": h['id'],
             "ticker": h['ticker'],
             "currency": curr,
-            "currency_symbol": "₦" if curr == "NGN" else "$",
+            "currency_symbol": "$",
+            "is_crypto": is_crypto_ticker(h['ticker']),
+            "asset_type": get_asset_type(h['ticker']),
             "shares": h['shares'],
             "buy_price": round(h['buy_price'], 2) if h.get('buy_price') is not None else None,
             "last_price": round(h['last_price'], 2) if h.get('last_price') is not None else None,
@@ -386,7 +377,6 @@ def get_portfolio_live_prices(
     payload = {
         "status": "success",
         "last_updated": latest_update.strftime('%H:%M:%S') if latest_update else "Live",
-        "ngx_cooldown": is_kobo_circuit_breaker_active(),
         "summary": {
             "total_holdings": len(results),
             "total_shares": round(total_shares, 2),
