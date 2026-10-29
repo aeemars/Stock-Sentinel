@@ -2,8 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-.env
-.env.*
 backend/.env
 backend/.env.*
 stocks.db
@@ -20,3 +18,4 @@ dist/
 
 # Pytest & Cache
 .pytest_cache/
+config.bat
