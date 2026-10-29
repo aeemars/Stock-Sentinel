@@ -16,29 +16,6 @@ AI-powered stock monitoring dashboard. Track portfolios, get sentiment analysis 
 - **Frontend:** HTML/Jinja2, Tailwind CSS, Material Symbols
 - **Auth & Ops:** ItsDangerous (Signed Session Cookies), bcrypt, APScheduler
 
-## Quick Start
-
-```bash
-# 1. Set up environment
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# 2. Start Postgres (Docker)
-docker run --name stocks-postgres \
-  -e POSTGRES_USER=aeem \
-  -e POSTGRES_PASSWORD=bunymide \
-  -e POSTGRES_DB=stocks_db \
-  -p 5432:5432 -d postgres
-
-# 3. Configure
-cp .env.example .env
-# Set NEON_DATABASE_URL, SECRET_KEY, and optionally OPENROUTER_API_KEY
-
-# 4. Run
-uvicorn main:app --reload --port 5000
-# or python main.py
-```
-
 Open `http://localhost:5000/register` to create an account.
 
 ## AI Intelligence Pipeline
