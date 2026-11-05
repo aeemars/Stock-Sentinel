@@ -43,8 +43,10 @@ app/
   routers/          Modular route handlers (auth, dashboard, portfolios, holdings, alerts, analytics, api)
 db.py               PostgreSQL schema + connection pool + get_db dependency
 scheduler.py        APScheduler cron job
-templates/          Jinja2 pages (dashboard, portfolio, alerts, analytics, etc.)
-static/             Favicon, PWA icons, manifest, and assets
+frontend/
+  templates/        Jinja2 pages (dashboard, portfolio, alerts, analytics, etc.)
+  static/           Favicon, PWA icons, manifest, and assets
+  worker.js         Cloudflare Workers edge gateway & cron scheduler
 ```
 
 ## Environment Variables

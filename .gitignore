@@ -4,7 +4,6 @@ __pycache__/
 venv/
 backend/.env
 backend/.env.*
-.env
 stocks.db
 *.db
 todo.md

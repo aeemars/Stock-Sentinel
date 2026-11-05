@@ -9,9 +9,20 @@ from app.auth import AnonymousUser
 
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-TEMPLATES_DIR = BASE_DIR / "templates"
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR) if TEMPLATES_DIR.exists() else "templates")
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+REPO_DIR = BACKEND_DIR.parent
+
+# Locate template directory (primary: frontend/templates)
+CANDIDATE_DIRS = [
+    REPO_DIR / "frontend" / "templates",
+    BACKEND_DIR / "templates",
+    Path("frontend/templates").resolve(),
+    Path("../frontend/templates").resolve(),
+    Path("templates").resolve(),
+]
+
+TEMPLATES_DIR = next((d for d in CANDIDATE_DIRS if d.is_dir()), REPO_DIR / "frontend" / "templates")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 @jinja2.pass_context
