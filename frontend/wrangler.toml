@@ -4,7 +4,6 @@
 name = "stock-sentinel"
 main = "worker.js"
 compatibility_date = "2024-09-23"
-compatibility_flags = ["nodejs_compat"]
 
 # ------------------------------------------------------------------------------
 # Cloudflare Workers Static Assets
