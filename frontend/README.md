@@ -7,6 +7,7 @@ This directory contains the Cloudflare Workers Edge Gateway, PWA static assets, 
 - **`worker.js`**: Edge reverse-proxy with caching, security headers, health endpoints (`/cdn-cgi/health`), and cron trigger automation (`/api/run-workflow`).
 - **`wrangler.toml`**: Cloudflare Workers configuration with `[assets]` binding pointing to `./static`.
 - **`static/`**: PWA manifest, service worker (`/sw.js`), icons, favicon, and `_headers`.
+- **`templates/`**: Jinja2 UI templates (dashboard, portfolio, alerts, analytics, settings, etc.).
 
 ---
 
