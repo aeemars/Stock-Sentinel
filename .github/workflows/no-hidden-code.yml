@@ -1,0 +1,10 @@
+name: no-hidden-code
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/check-no-hidden-code.sh
