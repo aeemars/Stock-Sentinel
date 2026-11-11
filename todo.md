@@ -1,0 +1,5 @@
+- [x] implement mobile view/compatibility for good fit on mobile devices.
+- [x] execute all security remediations (SEC-01 to SEC-10) with Memcached centralized caching.
+- [x] implement native web app (PWA) with offline shell, manifest, and home screen install triggers.
+- [x] setup codebase for Cloudflare Workers & Pages (edge caching, PWA routing, cron triggers).
+- [x] configure Vercel deployment (vercel.json, runtime.txt, app.py entrypoint) and remove Docker/Pxxl configurations.
