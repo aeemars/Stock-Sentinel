@@ -20,6 +20,17 @@ def test_root_redirects_to_dashboard():
     assert resp.status_code == 303
     assert "/dashboard" in resp.headers.get("location", "")
 
+def test_forwarded_host_keeps_redirects_on_cloudflare_origin():
+    resp = client.get(
+        "/",
+        headers={
+            "x-forwarded-host": "stock-sentinel-aeemars.workers.dev",
+            "x-forwarded-proto": "https",
+        },
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "https://stock-sentinel-aeemars.workers.dev/dashboard"
+
 def test_protected_routes_redirect_to_login():
     for path in ["/dashboard", "/alerts", "/analytics", "/settings", "/support", "/portfolio/1"]:
         resp = client.get(path)
