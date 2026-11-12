@@ -58,8 +58,29 @@ app = FastAPI(
 )
 
 import time
+from urllib.parse import urlsplit
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
+
+class ForwardedRequestMiddleware(BaseHTTPMiddleware):
+    """Make absolute URLs use the public host when behind the Cloudflare Worker."""
+    async def dispatch(self, request: Request, call_next):
+        forwarded_host = request.headers.get("x-forwarded-host")
+        if forwarded_host and "," not in forwarded_host and " " not in forwarded_host:
+            parsed_host = urlsplit(f"//{forwarded_host}")
+            if parsed_host.hostname:
+                port = parsed_host.port or (443 if request.headers.get("x-forwarded-proto") == "https" else 80)
+                request.scope["server"] = (parsed_host.hostname, port)
+                request.scope["scheme"] = (
+                    request.headers.get("x-forwarded-proto", request.scope.get("scheme", "http"))
+                )
+                request.scope["headers"] = [
+                    (b"host", forwarded_host.encode("ascii"))
+                    if name.lower() == b"host"
+                    else (name, value)
+                    for name, value in request.scope["headers"]
+                ]
+        return await call_next(request)
 
 class PerformanceMiddleware(BaseHTTPMiddleware):
     """Adds X-Response-Time and Server-Timing headers, plus HTTP caching for static assets."""
@@ -143,6 +164,7 @@ async def pwa_offline(request: Request):
     return render_template("offline.html", request)
 
 # Middlewares (Security & Performance outermost, then Compression & Session)
+app.add_middleware(ForwardedRequestMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(PerformanceMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
