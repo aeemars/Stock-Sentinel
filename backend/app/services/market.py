@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 _CACHE_LOCK = threading.Lock()
 _PRICE_CACHE: Dict[str, Tuple[float, float]] = {}  # ticker -> (price, timestamp)
 _NEGATIVE_CACHE: Dict[str, float] = {}  # ticker -> expire_timestamp
-DEFAULT_CACHE_TTL = 30.0  # seconds for US / Yahoo Finance
 DEFAULT_CACHE_TTL = 30.0  # seconds for US equities and crypto / Yahoo Finance
 
 # Well-known crypto base symbols for smart detection

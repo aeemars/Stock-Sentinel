@@ -137,6 +137,7 @@ def test_support_page_loads():
     set_cached_user(mock_user.id, mock_user)
     session_cookie = dump_session({"user_id": 777, "_csrf_token": "token777"})
 
+    client.cookies.clear()
     client.cookies.set("session", session_cookie)
     resp = client.get("/support")
     assert resp.status_code == 200
@@ -152,6 +153,7 @@ def test_support_contact_endpoint():
     session_token = dump_session({"user_id": 888, "_csrf_token": "csrf_sarah"})
 
     # 1. Validation error: missing subject
+    client.cookies.clear()
     client.cookies.set("session", session_token)
     resp_missing_sub = client.post(
         "/support/contact",
@@ -333,6 +335,7 @@ def test_on_demand_ai_endpoints_unauth():
 
     # With CSRF token but without authenticated user, get_current_user redirects to /login
     session_cookie = dump_session({"_csrf_token": "csrf123"})
+    client.cookies.clear()
     client.cookies.set("session", session_cookie)
     resp3 = client.post("/portfolio/1/analyze-ai", data={"csrf_token": "csrf123"})
     assert resp3.status_code == 303
